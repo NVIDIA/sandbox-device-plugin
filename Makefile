@@ -24,19 +24,19 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-DOCKER_REPO ?= "nvcr.io/nvidia/kubevirt-gpu-device-plugin"
+DOCKER_REPO ?= "nvcr.io/nvidia/sandbox-device-plugin"
 DOCKER_TAG ?= v1.4.0
 
 PCI_IDS_URL ?= https://pci-ids.ucw.cz/v2.2/pci.ids
 
 build:
-	go build -o nvidia-kubevirt-gpu-device-plugin kubevirt-gpu-device-plugin/cmd
+	go build -o sandbox-device-plugin cmd
 test:
 	go test ./... -coverprofile=coverage.out -v
 test-coverage:
 	go tool cover -html=coverage.out
 clean:
-	rm -rf nvidia-kubevirt-gpu-device-plugin && rm -rf coverage.out
+	rm -rf sandbox-device-plugin && rm -rf coverage.out
 build-image:
 	docker build . -t $(DOCKER_REPO):$(DOCKER_TAG) 
 push-image: build-image

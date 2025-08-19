@@ -1,0 +1,47 @@
+// To regenerate api.pb.go run `hack/update-codegen.sh protobindings`
+syntax = "proto3";
+
+package apis;
+
+option go_package = "github.com/NVIDIA/sandbox-device-plugin/pkg/apis/";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.goproto_getters_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_unrecognized_all) = false;
+
+// Sandbox is the service advertised by the sandbox-device-plugin
+// Likely client will be the sandbox-shim which will need to know
+// which physical devices it needs to cold plug
+service Sandbox {
+	rpc GetDeviceAllocation(DeviceRequest) returns (PhysicalDeviceResponse) {}
+	rpc Allocate(AllocateRequest) returns (PhysicalDeviceResponse) {}
+}
+
+message DeviceRequest {
+	// PodID is the UUID of the pod for which devices are being sought
+	string PodID = 1;
+	// Count is the number of devices needed
+	int32 Count = 2;
+	// DeviceType is the type of device
+	string DeviceType = 3;
+}
+
+message PhysicalDeviceResponse {
+	// PhysicalDeviceID is the list of physical ids of the devices requested
+	repeated string PhysicalDeviceID = 1;
+}
+
+message AllocateRequest {
+	// PodID is the uuid string of the pod
+	string PodID = 1;
+	// ContainerID is the uuid string of a container within the pod
+	string ContainerID = 2;
+	// VirtualDeviceID is a list of virtual_ids that should be associated with the pod
+	repeated string VirtualDeviceID = 3;
+}

@@ -75,7 +75,7 @@ type GenericDevicePlugin struct {
 // Returns an initialized instance of GenericDevicePlugin
 func NewGenericDevicePlugin(deviceName string, devicePath string, devices []*pluginapi.Device) *GenericDevicePlugin {
 	log.Println("Devicename " + deviceName)
-	serverSock := fmt.Sprintf(pluginapi.DevicePluginPath+"kubevirt-%s.sock", deviceName)
+	serverSock := fmt.Sprintf(pluginapi.DevicePluginPath+"sandbox-%s.sock", deviceName)
 	dpi := &GenericDevicePlugin{
 		devs:       devices,
 		socketPath: serverSock,
