@@ -81,8 +81,18 @@ func InitiateDevicePlugin() {
 	createIommuDeviceMap()
 	//Identifies vGPUs and represents it in appropriate structures
 	createVgpuIDMap()
+	//Creates sandbox api server
+	createSandboxAPIServer()
 	//Creates and starts device plugin
 	createDevicePlugins()
+}
+
+// Starts SandboxAPIServer that serves the CDIResolver service
+func createSandboxAPIServer() {
+	sas := NewSandboxAPIServer()
+	// modify the deviceMap with virtual ids
+	sas.MapDevicesToVirtualSpace()
+	sas.Start(stop)
 }
 
 // Starts gpu pass through and vGPU device plugin

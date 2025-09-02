@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
@@ -9,9 +9,12 @@ echo "Starting protobuf code generation..."
 OUTPUT_DIR="."
 
 # Define the root directory for all proto files
+BASEDIR="$(dirname "$0")"
+cd ${BASEDIR}/..
+
 BASE_PATH=`pwd`
 PROTO_PATH="./"
-pushd ./pkg/apis
+cd ./pkg/apis
 
 # Find all .proto files and compile them
 # The -I flag specifies the directory to search for imports.
@@ -24,8 +27,6 @@ find "${PROTO_PATH}" -name "*.proto" | while read PROTO_FILE; do
     --go-grpc_out=paths=source_relative:${OUTPUT_DIR} \
     "${PROTO_FILE}"
 done
-
-popd
 
 echo "Protobuf code generation finished."
 

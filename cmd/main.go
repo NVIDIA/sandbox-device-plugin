@@ -28,7 +28,7 @@
 
 package main
 
-import "kubevirt-gpu-device-plugin/pkg/device_plugin"
+import "github.com/nvidia/sandbox-device-plugin/pkg/device_plugin"
 
 func main() {
 	device_plugin.InitiateDevicePlugin()
