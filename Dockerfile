@@ -28,7 +28,7 @@ FROM nvcr.io/nvidia/cuda:12.9.1-base-ubi9 as builder
 
 RUN yum install -y wget make gcc
 
-ARG GOLANG_VERSION=1.24.0
+ARG GOLANG_VERSION=1.24.7
 RUN wget -nv -O - https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-amd64.tar.gz \
     | tar -C /usr/local -xz
 
@@ -38,7 +38,7 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 ENV GOOS=linux\
     GOARCH=amd64
 
-WORKDIR /go/src/kubevirt-gpu-device-plugin
+WORKDIR /go/src/sandbox-device-plugin
 
 COPY . . 
 
@@ -48,17 +48,17 @@ FROM nvcr.io/nvidia/distroless/go:v3.1.11
 
 ARG VERSION
 
-LABEL io.k8s.display-name="NVIDIA KubeVirt GPU Device Plugin"
-LABEL name="NVIDIA KubeVirt GPU Device Plugin"
+LABEL io.k8s.display-name="NVIDIA Sandbox Device Plugin"
+LABEL name="NVIDIA Sandbox Device Plugin"
 LABEL vendor="NVIDIA"
 LABEL version="${VERSION}"
 LABEL release="N/A"
-LABEL summary="NVIDIA device plugin for KubeVirt"
+LABEL summary="NVIDIA Sandbox Device Plugin"
 LABEL description="See summary"
 
-COPY --from=builder /go/src/kubevirt-gpu-device-plugin/nvidia-kubevirt-gpu-device-plugin /usr/bin/
-COPY --from=builder /go/src/kubevirt-gpu-device-plugin/utils/pci.ids /usr/pci.ids
+COPY --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/
+COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids
 
 USER 0:0
 
-CMD ["nvidia-kubevirt-gpu-device-plugin"]
+CMD ["nvidia-sandbox-device-plugin"]

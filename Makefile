@@ -30,13 +30,13 @@ DOCKER_TAG ?= v1.4.0
 PCI_IDS_URL ?= https://pci-ids.ucw.cz/v2.2/pci.ids
 
 build:
-	go build -o sandbox-device-plugin cmd
+	go build -o nvidia-sandbox-device-plugin ./cmd
 test:
 	go test ./... -coverprofile=coverage.out -v
 test-coverage:
 	go tool cover -html=coverage.out
 clean:
-	rm -rf sandbox-device-plugin && rm -rf coverage.out
+	rm -f nvidia-sandbox-device-plugin && rm -rf coverage.out
 build-image:
 	docker build . -t $(DOCKER_REPO):$(DOCKER_TAG) 
 push-image: build-image
