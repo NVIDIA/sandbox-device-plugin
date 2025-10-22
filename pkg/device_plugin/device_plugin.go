@@ -68,6 +68,7 @@ var basePath = "/sys/bus/pci/devices"
 var rootPath = "/"
 var vGpuBasePath = "/sys/bus/mdev/devices"
 var pciIdsFilePath = "/usr/pci.ids"
+var cdiresolverPath = "/var/run/cdiresolver"
 var readLink = readLinkFunc
 var readIDFromFile = readIDFromFileFunc
 var startDevicePlugin = startDevicePluginFunc
@@ -77,24 +78,31 @@ var startVgpuDevicePlugin = startVgpuDevicePluginFunc
 var stop = make(chan struct{})
 var PGPUAlias string
 var VGPUAlias string
+var EnableColdPlug string
+var cdiresolverInstance *SandboxAPIServer
 
 func InitiateDevicePlugin() {
 	//Identifies GPUs and represents it in appropriate structures
 	createIommuDeviceMap()
 	//Identifies vGPUs and represents it in appropriate structures
 	createVgpuIDMap()
-	//Creates sandbox api server
-	createSandboxAPIServer()
 	//Creates and starts device plugin
 	createDevicePlugins()
 }
 
+func enableColdPlug() bool {
+	if EnableColdPlug == "" || strings.EqualFold(EnableColdPlug, "false") {
+		return false
+	}
+	return true
+}
+
 // Starts SandboxAPIServer that serves the CDIResolver service
 func createSandboxAPIServer() {
-	sas := NewSandboxAPIServer()
+	cdiresolverInstance = NewSandboxAPIServer()
 	// modify the deviceMap with virtual ids
-	sas.MapDevicesToVirtualSpace()
-	sas.Start(stop)
+	cdiresolverInstance.MapDevicesToVirtualSpace()
+	cdiresolverInstance.Start()
 }
 
 // Starts gpu pass through and vGPU device plugin
@@ -106,6 +114,11 @@ func createDevicePlugins() {
 	log.Printf("Device Map %s", deviceMap)
 	log.Println("vGPU Map ", vGpuMap)
 	log.Println("GPU vGPU Map ", gpuVgpuMap)
+
+	// First create sandbox api server for cold plug support
+	if enableColdPlug() {
+		createSandboxAPIServer()
+	}
 
 	//Iterate over deivceMap to create device plugin for each type of GPU on the host
 	for k, v := range deviceMap {
@@ -126,7 +139,7 @@ func createDevicePlugins() {
 				deviceName = k
 			}
 		}
-		log.Printf("DP Name %s", deviceName)
+		log.Printf("DP Name %s, devs: %v", deviceName, devs)
 		dp := NewGenericDevicePlugin(deviceName, "/dev/vfio/", devs)
 		err := startDevicePlugin(dp)
 		if err != nil {
@@ -164,6 +177,12 @@ func createDevicePlugins() {
 	}
 
 	<-stop
+
+	if enableColdPlug() {
+		log.Printf("Shutting down CDIResolver APIServer")
+		cdiresolverInstance.Stop()
+	}
+
 	log.Printf("Shutting down device plugin controller")
 	for _, v := range devicePlugins {
 		v.Stop()

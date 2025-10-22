@@ -31,8 +31,11 @@ package device_plugin
 import (
 	"context"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 
 	uuid "github.com/google/uuid"
 	cdiresolver "github.com/kata-containers/kata-containers/src/runtime/protocols/cdiresolver"
@@ -45,7 +48,6 @@ type SandboxAPIServer struct {
 	name       string
 	server     *grpc.Server
 	socketPath string
-	stop       chan struct{} // this channel signals to stop the SAS server
 
 	// list of physical device ids associated with each GPU type
 	deviceIDs map[string][]string
@@ -69,7 +71,7 @@ type SandboxAPIServer struct {
 func NewSandboxAPIServer() *SandboxAPIServer {
 	return &SandboxAPIServer{
 		name:                 "CDIResolver",
-		socketPath:           "/var/run/cdiresolver/sandboxserver.sock",
+		socketPath:           cdiresolverPath + "/sandboxserver.sock",
 		deviceIDs:            make(map[string][]string),
 		virtualDeviceIDMap:   make(map[string]string),
 		deviceVirtualIDMap:   make(map[string]string),
@@ -93,6 +95,13 @@ func (sas *SandboxAPIServer) getVirtualID(physicalDeviceID string) string {
 // the actual physical ids are stored in deviceIDs map
 // this function should be called after iommuMap, deviceMap have been populated
 func (sas *SandboxAPIServer) MapDevicesToVirtualSpace() {
+	// clean out any stray/stale files from a prior run
+	err := sas.cleanup()
+	if err != nil {
+		log.Printf("Failed to clean out cdiresolver path: %v", err)
+		//return
+	}
+
 	// replace deviceMap
 	newDeviceMap := make(map[string][]string)
 	for deviceType, iommuGroups := range deviceMap {
@@ -100,35 +109,72 @@ func (sas *SandboxAPIServer) MapDevicesToVirtualSpace() {
 		physicalDevs := []string{}
 		for _, dev := range iommuGroups {
 			id := uuid.New().String()
+			// create a character device in cdiresolver path so that containerd thinks its a real device
+			if err := unix.Mknod(cdiresolverPath+"/"+id, unix.S_IFCHR|uint32(0600), int(unix.Mkdev(uint32(10), uint32(1010)))); err != nil {
+				fmt.Printf("Error creating character device: %v\n", err)
+			}
 
 			physicalDevs = append(physicalDevs, dev)
 			devs = append(devs, id)
 		}
-		sas.deviceIDs[deviceType] = physicalDevs
-		newDeviceMap[deviceType] = devs
+		deviceTypeKey := deviceType
+		if PGPUAlias != "" {
+			deviceTypeKey = fmt.Sprintf("nvidia.com/%s", PGPUAlias)
+		}
+		sas.deviceIDs[deviceTypeKey] = physicalDevs
+		newDeviceMap[deviceTypeKey] = devs
 	}
 	deviceMap = newDeviceMap
+	log.Printf("[Cold Plug] Original physical devices: %v", sas.deviceIDs)
+}
 
-	// replace iommuMap??
+// resolveDevicePath takes in a physical device and returns the host path
+// that points to this device. e.g. iommuId 19 will resolve to /dev/vfio/19
+// or /dev/vfio/devices/vfio0 in the case when iommufd is supported
+func (sas *SandboxAPIServer) resolveDevicePath(devId string) (string, error) {
+	hostPath := ""
+	iommufdSupported, err := supportsIOMMUFD()
+	if err != nil {
+		return "", fmt.Errorf("could not determine iommufd support: %w", err)
+	}
+	if iommufdSupported {
+		// get the dev from iommuMap
+		devs, exists := iommuMap[devId]
+		if !exists || len(devs) != 1 {
+			return "", fmt.Errorf("device does not exist or has more than one addresses: %v", devId)
+		}
+		// pick the first one (only one)
+		dev := devs[0]
+		vfiodev, err := readVFIODev(basePath, dev.addr)
+		if err != nil {
+			return "", fmt.Errorf("could not determine iommufd device for device %s: %v", dev.addr, err)
+		}
+		hostPath = filepath.Join(vfioDevicePath, "devices", vfiodev)
+	} else {
+		hostPath = filepath.Join(vfioDevicePath, devId)
+	}
+	return hostPath, nil
 }
 
 // AllocatePodDevices takes a deviceReqest (how many GPUs for a pod id)
 // and returns the list of physical devices that can be given to the pod
 func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdiresolver.PodRequest) (*cdiresolver.PhysicalDeviceResponse, error) {
-	deviceList := sas.deviceIDs[pr.DeviceType]
+	log.Printf("[Info] Pod Allocate Request: %v", pr)
+	deviceType := pr.DeviceType
+	deviceList := sas.deviceIDs[deviceType]
 	if len(deviceList) < int(pr.Count) {
-		return nil, fmt.Errorf("Not enough '%q' devices available for request '%v'", pr.DeviceType, pr)
+		return nil, fmt.Errorf("Not enough '%q' devices available for request '%v'", deviceType, pr)
 	}
 	response := &cdiresolver.PhysicalDeviceResponse{}
 	physicalDevices := []string{}
 	// podRequest has three fields : PodID, Count, DeviceType
 	// get 'Count' number of GPUs from deviceIDs map
 	for _ = range pr.Count {
-		deviceList := sas.deviceIDs[pr.DeviceType]
+		deviceList := sas.deviceIDs[deviceType]
 		// pop the last device
 		dev := deviceList[len(deviceList)-1]
 		deviceList = deviceList[:len(deviceList)-1]
-		sas.deviceIDs[pr.DeviceType] = deviceList
+		sas.deviceIDs[deviceType] = deviceList
 
 		// store the association in pod mapping
 		podDevices := sas.podDeviceIDMap[pr.PodID]
@@ -136,9 +182,12 @@ func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdireso
 		sas.podDeviceIDMap[pr.PodID] = podDevices
 
 		// put the physical device ID list in response structure
+		// in fact put the iommu_fd/iommu_id instead of the dev itself
 		physicalDevices = append(physicalDevices, dev)
 	}
 	response.PhysicalDeviceID = physicalDevices
+
+	log.Printf("[Info] Pod Allocate Response: %v", response)
 	return response, nil
 }
 
@@ -149,6 +198,7 @@ func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdireso
 // of a particular pod.
 func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *cdiresolver.ContainerRequest) (*cdiresolver.PhysicalDeviceResponse, error) {
 	// ContainerRequest has three fields PodID ContainerID VirtualDeviceID
+	log.Printf("[Info] Container Allocate Request: %v", cr)
 
 	// save the container against the said pod
 	containers := sas.podContainerIDMap[cr.PodID]
@@ -161,7 +211,7 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 	physicalDevices := sas.podDeviceIDMap[cr.PodID]
 	for _, cid := range cr.VirtualDeviceID {
 		if _, ok := sas.virtualDeviceIDMap[cid]; ok {
-			err := fmt.Errorf("Virtual ID %s is already taken", cid)
+			err := fmt.Errorf("Virtual Device ID %s is already taken", cid)
 			log.Print(err)
 			return nil, err
 		}
@@ -174,24 +224,34 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 			if ok {
 				continue
 			}
+			devicePath, err := sas.resolveDevicePath(physDev)
+			if err != nil {
+				// bad device
+				log.Printf("Bad device %v in ContainerAllocate: %v", physDev, err)
+				continue
+			}
 			// assign it to cid
 			containerDevices := sas.containerDeviceIDMap[cr.ContainerID]
 			containerDevices = append(containerDevices, cid)
 			sas.containerDeviceIDMap[cr.ContainerID] = containerDevices
 			sas.virtualDeviceIDMap[cid] = physDev
 			sas.deviceVirtualIDMap[physDev] = cid
-			response.PhysicalDeviceID = append(response.PhysicalDeviceID, physDev)
+			response.PhysicalDeviceID = append(response.PhysicalDeviceID, devicePath)
 			assigned = true
 			break
 		}
 		if !assigned {
-			return response, fmt.Errorf("Could not find a suitable physical device for %q. Request: %v", cid, cr)
+			err := fmt.Errorf("Could not find a suitable physical device for %q. Request: %v", cid, cr)
+			log.Print(err)
+			return response, err
 		}
 	}
+	log.Printf("[Info] Container Allocate Response: %v", response)
 	return response, nil
 }
 
 func (sas *SandboxAPIServer) FreeContainerDevices(ctx context.Context, cr *cdiresolver.ContainerRequest) (*cdiresolver.PhysicalDeviceResponse, error) {
+	log.Printf("[Info] Free Container Request: %v", cr)
 	response := &cdiresolver.PhysicalDeviceResponse{}
 	// dis-associate container's virtual ids with the physical devices
 	removeMap := make(map[string]bool)
@@ -212,35 +272,72 @@ func (sas *SandboxAPIServer) FreeContainerDevices(ctx context.Context, cr *cdire
 		}
 	}
 	sas.containerDeviceIDMap[cr.ContainerID] = remainingVirtualDevices
+
+	// remove container from pod's container map
+	containers := sas.podContainerIDMap[cr.PodID]
+	for i, cid := range containers {
+		if cid == cr.ContainerID {
+			containers = append(containers[:i], containers[i+1:]...)
+			break
+		}
+	}
+	sas.podContainerIDMap[cr.PodID] = containers
+
+	log.Printf("[Info] Free Container Response: %v", response)
 	return response, nil
 }
 
 func (sas *SandboxAPIServer) FreePodDevices(ctx context.Context, pr *cdiresolver.PodRequest) (*cdiresolver.PhysicalDeviceResponse, error) {
+	log.Printf("[INFO] Free Pod Devices request: %v", pr)
 	// remove all physical devices associated with pod
 	response := &cdiresolver.PhysicalDeviceResponse{}
 	response.PhysicalDeviceID = sas.podDeviceIDMap[pr.PodID]
-	sas.podDeviceIDMap[pr.PodID] = nil
+	delete(sas.podDeviceIDMap, pr.PodID)
 
-	// put the devices back into available device list for the give type
-	sas.deviceIDs[pr.DeviceType] = append(sas.deviceIDs[pr.DeviceType], response.PhysicalDeviceID...)
+	// put the devices back into available device list for the given type
+	deviceType := pr.DeviceType
+	sas.deviceIDs[deviceType] = append(sas.deviceIDs[deviceType], response.PhysicalDeviceID...)
+
+	// also double check and free the virtual device IDs associated with these physical devices
+	// get containers for the pod:
+	containers := sas.podContainerIDMap[pr.PodID]
+	for _, cid := range containers {
+		vids := sas.containerDeviceIDMap[cid]
+		// remove the physical id mappings of these virtual ids
+		for _, vid := range vids {
+			physDev := sas.virtualDeviceIDMap[vid]
+			delete(sas.virtualDeviceIDMap, vid)
+			delete(sas.deviceVirtualIDMap, physDev)
+		}
+	}
+	delete(sas.podContainerIDMap, pr.PodID)
+	// in case there is some physical device assigned to the pod
+	// and mapped to a virtual device, but never had a container associated with it
+	// we still need to clean it up
+	for _, pdev := range response.PhysicalDeviceID {
+		delete(sas.deviceVirtualIDMap, pdev)
+	}
+
+	log.Printf("[INFO] Free Pod Devices response: %v", response)
 	return response, nil
 }
 
 func (sas *SandboxAPIServer) cleanup() error {
-	return nil
+	return os.RemoveAll(cdiresolverPath)
+}
+
+// Stop stops the gRPC server
+func (sas *SandboxAPIServer) Stop() error {
+	sas.server.Stop()
+	sas.server = nil
+
+	return sas.cleanup()
 }
 
 // Start starts the gRPC server of the sandboxAPIServer
-func (sas *SandboxAPIServer) Start(stop chan struct{}) error {
+func (sas *SandboxAPIServer) Start() error {
 	if sas.server != nil {
 		return fmt.Errorf("gRPC server already started")
-	}
-
-	sas.stop = stop
-
-	err := sas.cleanup()
-	if err != nil {
-		return err
 	}
 
 	sock, err := net.Listen("unix", sas.socketPath)

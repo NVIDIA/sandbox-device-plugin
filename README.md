@@ -1,7 +1,5 @@
 # NVIDIA K8s Device Plugin to assign GPUs and vGPUs to Kata VMs for Confidential Containers
 
-> Starting from v1.1.0, we will only be supporting KubeVirt v0.36.0 or newer. Please use v1.0.1 for compatibility with older KubeVirt versions.
-
 ## Table of Contents
 - [About](#about)
 - [Features](#features)

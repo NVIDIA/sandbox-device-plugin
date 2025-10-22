@@ -250,9 +250,48 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 	}
 }
 
+// Performs pre allocation checks and allocates a virtual cold plug device based on the request
+func (dpi *GenericDevicePlugin) ColdPlugAllocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+	log.Println("In cold plug allocate")
+	responses := pluginapi.AllocateResponse{}
+	envList := map[string][]string{}
+	for _, req := range reqs.ContainerRequests {
+		deviceSpecs := make([]*pluginapi.DeviceSpec, 0)
+		for _, devId := range req.DevicesIDs {
+			// since this is cold plug, just the virtual ids itself is good enough
+			// cannot prepare the devices at this point, can't even check if they belong to a valid iommu/vendor
+			devAddrs := []string{devId}
+			deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
+				HostPath:      cdiresolverPath,
+				ContainerPath: cdiresolverPath,
+				Permissions:   "mrw",
+			})
+
+			key := fmt.Sprintf("%s_%s", gpuPrefix, strings.ToUpper(dpi.deviceName))
+			if _, exists := envList[key]; !exists {
+				envList[key] = []string{}
+			}
+			envList[key] = append(envList[key], devAddrs...)
+		}
+		envs := buildEnv(envList)
+		log.Printf("Cold plug Allocated devices %s", envs)
+		response := pluginapi.ContainerAllocateResponse{
+			Envs:    envs,
+			Devices: deviceSpecs,
+		}
+
+		responses.ContainerResponses = append(responses.ContainerResponses, &response)
+	}
+
+	return &responses, nil
+}
+
 // Performs pre allocation checks and allocates a devices based on the request
 func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	log.Println("In allocate")
+	if enableColdPlug() {
+		// Allocate using the Cold Plug mechanism instead
+		return dpi.ColdPlugAllocate(ctx, reqs)
+	}
 	responses := pluginapi.AllocateResponse{}
 	envList := map[string][]string{}
 	iommufdSupported, err := supportsIOMMUFD()

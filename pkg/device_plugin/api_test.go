@@ -139,13 +139,13 @@ func TestAllocateContainerDevices(t *testing.T) {
 				ContainerID:     containerID1,
 				VirtualDeviceID: []string{"virt-dev-1"},
 			},
-			expectedPhysDevs: []string{"phys-dev-1"},
+			expectedPhysDevs: []string{"/dev/vfio/phys-dev-1"},
 			expectedErr:      false,
 			expectedMapsAfter: func(resp *cdiresolver.PhysicalDeviceResponse) {
 				if len(resp.PhysicalDeviceID) != 1 {
 					t.Errorf("Bad count of physical devices in response '%v'", resp.PhysicalDeviceID)
 				}
-				if resp.PhysicalDeviceID[0] != "phys-dev-1" && resp.PhysicalDeviceID[0] != "phys-dev-2" {
+				if resp.PhysicalDeviceID[0] != "/dev/vfio/phys-dev-1" && resp.PhysicalDeviceID[0] != "/dev/vfio/phys-dev-2" {
 					t.Errorf("Bad response")
 				}
 				if sas.virtualDeviceIDMap["virt-dev-1"] != "phys-dev-1" && sas.virtualDeviceIDMap["virt-dev-1"] != "phys-dev-2" {
@@ -166,13 +166,13 @@ func TestAllocateContainerDevices(t *testing.T) {
 				ContainerID:     containerID2,
 				VirtualDeviceID: []string{"virt-dev-2"},
 			},
-			expectedPhysDevs: []string{"phys-dev-2"},
+			expectedPhysDevs: []string{"/dev/vfio/phys-dev-2"},
 			expectedErr:      false,
 			expectedMapsAfter: func(resp *cdiresolver.PhysicalDeviceResponse) {
 				if len(resp.PhysicalDeviceID) != 1 {
 					t.Errorf("Bad count of physical devices in response")
 				}
-				if resp.PhysicalDeviceID[0] != "phys-dev-1" && resp.PhysicalDeviceID[0] != "phys-dev-2" {
+				if resp.PhysicalDeviceID[0] != "/dev/vfio/phys-dev-1" && resp.PhysicalDeviceID[0] != "/dev/vfio/phys-dev-2" {
 					t.Errorf("Bad response")
 				}
 				if sas.virtualDeviceIDMap["virt-dev-2"] != "phys-dev-2" && sas.virtualDeviceIDMap["virt-dev-2"] != "phys-dev-1" {
@@ -204,7 +204,7 @@ func TestAllocateContainerDevices(t *testing.T) {
 				ContainerID:     containerID1,
 				VirtualDeviceID: []string{"virt-dev-3", "virt-dev-4"},
 			},
-			expectedPhysDevs:  []string{"phys-dev-1", "phys-dev-2"},
+			expectedPhysDevs:  []string{"/dev/vfio/phys-dev-1", "/dev/vfio/phys-dev-2"},
 			expectedErr:       true,
 			expectedMapsAfter: func(resp *cdiresolver.PhysicalDeviceResponse) { /* No change expected */ },
 		},

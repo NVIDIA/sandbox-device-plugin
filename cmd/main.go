@@ -34,6 +34,7 @@ import (
 )
 
 func main() {
+	device_plugin.EnableColdPlug = os.Getenv("ENABLE_COLD_PLUG")
 	device_plugin.PGPUAlias = os.Getenv("P_GPU_ALIAS")
 	device_plugin.VGPUAlias = os.Getenv("V_GPU_ALIAS")
 	device_plugin.InitiateDevicePlugin()
