@@ -160,12 +160,24 @@ func (sas *SandboxAPIServer) resolveDevicePath(devId string) (string, error) {
 // and returns the list of physical devices that can be given to the pod
 func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdiresolver.PodRequest) (*cdiresolver.PhysicalDeviceResponse, error) {
 	log.Printf("[Info] Pod Allocate Request: %v", pr)
+
+	response := &cdiresolver.PhysicalDeviceResponse{}
+
+	// check if this pod already has some devices assigned
+	podDevices, exists := sas.podDeviceIDMap[pr.PodID]
+	if exists && len(podDevices) == int(pr.Count) {
+		response.PhysicalDeviceID = podDevices
+		log.Printf("[Info] Pod (already exists) Allocate Response: %v", response)
+		return response, nil
+	}
+
 	deviceType := pr.DeviceType
 	deviceList := sas.deviceIDs[deviceType]
 	if len(deviceList) < int(pr.Count) {
-		return nil, fmt.Errorf("Not enough '%q' devices available for request '%v'", deviceType, pr)
+		err := fmt.Errorf("Not enough '%q' devices available for request '%v'", deviceType, pr)
+		log.Print(err)
+		return nil, err
 	}
-	response := &cdiresolver.PhysicalDeviceResponse{}
 	physicalDevices := []string{}
 	// podRequest has three fields : PodID, Count, DeviceType
 	// get 'Count' number of GPUs from deviceIDs map
@@ -177,7 +189,7 @@ func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdireso
 		sas.deviceIDs[deviceType] = deviceList
 
 		// store the association in pod mapping
-		podDevices := sas.podDeviceIDMap[pr.PodID]
+		podDevices = sas.podDeviceIDMap[pr.PodID]
 		podDevices = append(podDevices, dev)
 		sas.podDeviceIDMap[pr.PodID] = podDevices
 
@@ -209,9 +221,9 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 
 	// now we get the physical devices associated with PodID
 	physicalDevices := sas.podDeviceIDMap[cr.PodID]
-	for _, cid := range cr.VirtualDeviceID {
-		if _, ok := sas.virtualDeviceIDMap[cid]; ok {
-			err := fmt.Errorf("Virtual Device ID %s is already taken", cid)
+	for _, vid := range cr.VirtualDeviceID {
+		if _, ok := sas.virtualDeviceIDMap[vid]; ok {
+			err := fmt.Errorf("Virtual Device ID %s is already taken", vid)
 			log.Print(err)
 			return nil, err
 		}
@@ -230,18 +242,18 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 				log.Printf("Bad device %v in ContainerAllocate: %v", physDev, err)
 				continue
 			}
-			// assign it to cid
+			// assign it to vid
 			containerDevices := sas.containerDeviceIDMap[cr.ContainerID]
-			containerDevices = append(containerDevices, cid)
+			containerDevices = append(containerDevices, vid)
 			sas.containerDeviceIDMap[cr.ContainerID] = containerDevices
-			sas.virtualDeviceIDMap[cid] = physDev
-			sas.deviceVirtualIDMap[physDev] = cid
+			sas.virtualDeviceIDMap[vid] = physDev
+			sas.deviceVirtualIDMap[physDev] = vid
 			response.PhysicalDeviceID = append(response.PhysicalDeviceID, devicePath)
 			assigned = true
 			break
 		}
 		if !assigned {
-			err := fmt.Errorf("Could not find a suitable physical device for %q. Request: %v", cid, cr)
+			err := fmt.Errorf("Could not find a suitable physical device for %q. Request: %v", vid, cr)
 			log.Print(err)
 			return response, err
 		}
@@ -254,24 +266,15 @@ func (sas *SandboxAPIServer) FreeContainerDevices(ctx context.Context, cr *cdire
 	log.Printf("[Info] Free Container Request: %v", cr)
 	response := &cdiresolver.PhysicalDeviceResponse{}
 	// dis-associate container's virtual ids with the physical devices
-	removeMap := make(map[string]bool)
-	for _, cid := range cr.VirtualDeviceID {
-		removeMap[cid] = true
-	}
 	vids := sas.containerDeviceIDMap[cr.ContainerID]
-	remainingVirtualDevices := []string{}
 	for _, vid := range vids {
-		if !removeMap[vid] {
-			remainingVirtualDevices = append(remainingVirtualDevices, vid)
-		} else {
-			// remove the virtual to physical mapping
-			physDev := sas.virtualDeviceIDMap[vid]
-			delete(sas.virtualDeviceIDMap, vid)
-			delete(sas.deviceVirtualIDMap, physDev)
-			response.PhysicalDeviceID = append(response.PhysicalDeviceID, physDev)
-		}
+		// remove the virtual to physical mapping
+		physDev := sas.virtualDeviceIDMap[vid]
+		delete(sas.virtualDeviceIDMap, vid)
+		delete(sas.deviceVirtualIDMap, physDev)
+		response.PhysicalDeviceID = append(response.PhysicalDeviceID, physDev)
 	}
-	sas.containerDeviceIDMap[cr.ContainerID] = remainingVirtualDevices
+	delete(sas.containerDeviceIDMap, cr.ContainerID)
 
 	// remove container from pod's container map
 	containers := sas.podContainerIDMap[cr.PodID]

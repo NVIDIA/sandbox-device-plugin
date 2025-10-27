@@ -252,7 +252,7 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 
 // Performs pre allocation checks and allocates a virtual cold plug device based on the request
 func (dpi *GenericDevicePlugin) ColdPlugAllocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	log.Println("In cold plug allocate")
+	log.Printf("[INFO] Cold Plug Allocate request: %v", reqs)
 	responses := pluginapi.AllocateResponse{}
 	envList := map[string][]string{}
 	for _, req := range reqs.ContainerRequests {
@@ -262,8 +262,8 @@ func (dpi *GenericDevicePlugin) ColdPlugAllocate(ctx context.Context, reqs *plug
 			// cannot prepare the devices at this point, can't even check if they belong to a valid iommu/vendor
 			devAddrs := []string{devId}
 			deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
-				HostPath:      cdiresolverPath,
-				ContainerPath: cdiresolverPath,
+				HostPath:      filepath.Join(cdiresolverPath, devId),
+				ContainerPath: filepath.Join(cdiresolverPath, devId),
 				Permissions:   "mrw",
 			})
 
@@ -274,7 +274,6 @@ func (dpi *GenericDevicePlugin) ColdPlugAllocate(ctx context.Context, reqs *plug
 			envList[key] = append(envList[key], devAddrs...)
 		}
 		envs := buildEnv(envList)
-		log.Printf("Cold plug Allocated devices %s", envs)
 		response := pluginapi.ContainerAllocateResponse{
 			Envs:    envs,
 			Devices: deviceSpecs,
@@ -283,6 +282,7 @@ func (dpi *GenericDevicePlugin) ColdPlugAllocate(ctx context.Context, reqs *plug
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)
 	}
 
+	log.Printf("[INFO] Cold Plug Allocate response: %v", responses)
 	return &responses, nil
 }
 
