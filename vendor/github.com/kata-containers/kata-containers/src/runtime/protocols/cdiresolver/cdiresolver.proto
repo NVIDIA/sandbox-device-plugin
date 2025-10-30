@@ -36,8 +36,10 @@ message PodRequest {
 }
 
 message PhysicalDeviceResponse {
-	// PhysicalDeviceID is the list of physical ids of the devices requested
-	repeated string PhysicalDeviceID = 1;
+	// VirtualDeviceIDs is the list of virtual ids of the devices requested
+	repeated string VirtualDeviceIDs = 1;
+	// PhysicalDeviceIDs is the list of physical ids of the devices requested
+	repeated string PhysicalDeviceIDs = 2;
 }
 
 message ContainerRequest {
@@ -45,6 +47,6 @@ message ContainerRequest {
 	string PodID = 1;
 	// ContainerID is the uuid string of a container within the pod
 	string ContainerID = 2;
-	// VirtualDeviceID is a list of virtual_ids that should be associated with the pod
-	repeated string VirtualDeviceID = 3;
+	// VirtualDeviceIDs is a list of virtual_ids that should be associated with the pod
+	repeated string VirtualDeviceIDs = 3;
 }

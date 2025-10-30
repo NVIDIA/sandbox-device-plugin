@@ -23,8 +23,8 @@ github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad/go.mod h1:vavhavw2zAx
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/gorilla/mux v1.7.4/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB71So=
-github.com/jojimt/kata-containers/src/runtime v0.0.0-20250923214116-860bce0a244e h1:Cz9ozgoy0waCfDZm1GYKF6uzDQu9yQU2z1/boCjcx2o=
-github.com/jojimt/kata-containers/src/runtime v0.0.0-20250923214116-860bce0a244e/go.mod h1:0rQOrgBfes0rQwLCq0M45K6jvFAascBubQb++OL14D4=
+github.com/jojimt/kata-containers/src/runtime v0.0.0-20251030193914-638e45702938 h1:k+hBNXiyrNDkPls4nQL+ZO6TsYh6Nlao9is5NnCZqIo=
+github.com/jojimt/kata-containers/src/runtime v0.0.0-20251030193914-638e45702938/go.mod h1:0rQOrgBfes0rQwLCq0M45K6jvFAascBubQb++OL14D4=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/onsi/ginkgo/v2 v2.22.2 h1:/3X8Panh8/WwhU/3Ssa6rCKqPLuAkVY2I0RoyDLySlU=

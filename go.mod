@@ -8,9 +8,10 @@ require (
 	github.com/NVIDIA/gpu-monitoring-tools v0.0.0-20211102125545-5a2c58442e48
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
-	github.com/kata-containers/kata-containers/src/runtime v0.0.0-20250925190653-d1f52728ccdf
+	github.com/kata-containers/kata-containers/src/runtime v0.0.0-20251030104659-e30e2b5f4527
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
+	golang.org/x/sys v0.33.0
 	google.golang.org/grpc v1.72.0
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubelet v0.32.2
@@ -23,7 +24,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
@@ -31,4 +31,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/kata-containers/kata-containers/src/runtime => github.com/jojimt/kata-containers/src/runtime v0.0.0-20250923214116-860bce0a244e
+replace github.com/kata-containers/kata-containers/src/runtime => github.com/jojimt/kata-containers/src/runtime v0.0.0-20251030193914-638e45702938

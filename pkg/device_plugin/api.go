@@ -166,7 +166,7 @@ func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdireso
 	// check if this pod already has some devices assigned
 	podDevices, exists := sas.podDeviceIDMap[pr.PodID]
 	if exists && len(podDevices) == int(pr.Count) {
-		response.PhysicalDeviceID = podDevices
+		response.PhysicalDeviceIDs = podDevices
 		log.Printf("[Info] Pod (already exists) Allocate Response: %v", response)
 		return response, nil
 	}
@@ -197,7 +197,7 @@ func (sas *SandboxAPIServer) AllocatePodDevices(ctx context.Context, pr *cdireso
 		// in fact put the iommu_fd/iommu_id instead of the dev itself
 		physicalDevices = append(physicalDevices, dev)
 	}
-	response.PhysicalDeviceID = physicalDevices
+	response.PhysicalDeviceIDs = physicalDevices
 
 	log.Printf("[Info] Pod Allocate Response: %v", response)
 	return response, nil
@@ -221,7 +221,7 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 
 	// now we get the physical devices associated with PodID
 	physicalDevices := sas.podDeviceIDMap[cr.PodID]
-	for _, vid := range cr.VirtualDeviceID {
+	for _, vid := range cr.VirtualDeviceIDs {
 		if _, ok := sas.virtualDeviceIDMap[vid]; ok {
 			err := fmt.Errorf("Virtual Device ID %s is already taken", vid)
 			log.Print(err)
@@ -248,7 +248,8 @@ func (sas *SandboxAPIServer) AllocateContainerDevices(ctx context.Context, cr *c
 			sas.containerDeviceIDMap[cr.ContainerID] = containerDevices
 			sas.virtualDeviceIDMap[vid] = physDev
 			sas.deviceVirtualIDMap[physDev] = vid
-			response.PhysicalDeviceID = append(response.PhysicalDeviceID, devicePath)
+			response.VirtualDeviceIDs = append(response.VirtualDeviceIDs, vid)
+			response.PhysicalDeviceIDs = append(response.PhysicalDeviceIDs, devicePath)
 			assigned = true
 			break
 		}
@@ -272,7 +273,7 @@ func (sas *SandboxAPIServer) FreeContainerDevices(ctx context.Context, cr *cdire
 		physDev := sas.virtualDeviceIDMap[vid]
 		delete(sas.virtualDeviceIDMap, vid)
 		delete(sas.deviceVirtualIDMap, physDev)
-		response.PhysicalDeviceID = append(response.PhysicalDeviceID, physDev)
+		response.PhysicalDeviceIDs = append(response.PhysicalDeviceIDs, physDev)
 	}
 	delete(sas.containerDeviceIDMap, cr.ContainerID)
 
@@ -294,12 +295,12 @@ func (sas *SandboxAPIServer) FreePodDevices(ctx context.Context, pr *cdiresolver
 	log.Printf("[INFO] Free Pod Devices request: %v", pr)
 	// remove all physical devices associated with pod
 	response := &cdiresolver.PhysicalDeviceResponse{}
-	response.PhysicalDeviceID = sas.podDeviceIDMap[pr.PodID]
+	response.PhysicalDeviceIDs = sas.podDeviceIDMap[pr.PodID]
 	delete(sas.podDeviceIDMap, pr.PodID)
 
 	// put the devices back into available device list for the given type
 	deviceType := pr.DeviceType
-	sas.deviceIDs[deviceType] = append(sas.deviceIDs[deviceType], response.PhysicalDeviceID...)
+	sas.deviceIDs[deviceType] = append(sas.deviceIDs[deviceType], response.PhysicalDeviceIDs...)
 
 	// also double check and free the virtual device IDs associated with these physical devices
 	// get containers for the pod:
@@ -317,7 +318,7 @@ func (sas *SandboxAPIServer) FreePodDevices(ctx context.Context, pr *cdiresolver
 	// in case there is some physical device assigned to the pod
 	// and mapped to a virtual device, but never had a container associated with it
 	// we still need to clean it up
-	for _, pdev := range response.PhysicalDeviceID {
+	for _, pdev := range response.PhysicalDeviceIDs {
 		delete(sas.deviceVirtualIDMap, pdev)
 	}
 

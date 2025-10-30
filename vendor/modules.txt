@@ -31,7 +31,7 @@ github.com/google/pprof/profile
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
-# github.com/kata-containers/kata-containers/src/runtime v0.0.0-20250925190653-d1f52728ccdf => github.com/jojimt/kata-containers/src/runtime v0.0.0-20250923214116-860bce0a244e
+# github.com/kata-containers/kata-containers/src/runtime v0.0.0-20251030104659-e30e2b5f4527 => github.com/jojimt/kata-containers/src/runtime v0.0.0-20251030193914-638e45702938
 ## explicit; go 1.24.6
 github.com/kata-containers/kata-containers/src/runtime/protocols/cdiresolver
 # github.com/onsi/ginkgo/v2 v2.22.2
@@ -226,4 +226,4 @@ k8s.io/klog/v2/internal/sloghandler
 # k8s.io/kubelet v0.32.2
 ## explicit; go 1.23.0
 k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1
-# github.com/kata-containers/kata-containers/src/runtime => github.com/jojimt/kata-containers/src/runtime v0.0.0-20250923214116-860bce0a244e
+# github.com/kata-containers/kata-containers/src/runtime => github.com/jojimt/kata-containers/src/runtime v0.0.0-20251030193914-638e45702938
