@@ -33,7 +33,7 @@ build:
 	go build -o nvidia-sandbox-device-plugin ./cmd
 test:
 	go test ./... -coverprofile=coverage.out -v
-test-coverage:
+coverage:
 	go tool cover -html=coverage.out
 clean:
 	rm -f nvidia-sandbox-device-plugin && rm -rf coverage.out

@@ -8,8 +8,15 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    open-pull-requests-limit: 10
     labels:
-      - dependencies
+    - dependencies
+    groups:
+      k8sio:
+        patterns:
+          - k8s.io/*
+        exclude-patterns:
+          - k8s.io/klog/*
 
   - package-ecosystem: "docker"
     directory: "/"
