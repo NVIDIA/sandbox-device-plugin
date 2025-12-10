@@ -79,14 +79,6 @@ func NewGenericDevicePlugin(deviceName string, devicePath string, devices []*plu
 	return dpi
 }
 
-func buildEnv(envList map[string][]string) map[string]string {
-	env := map[string]string{}
-	for key, devList := range envList {
-		env[key] = strings.Join(devList, ",")
-	}
-	return env
-}
-
 func waitForGrpcServer(socketPath string, timeout time.Duration) error {
 	conn, err := connect(socketPath, timeout)
 	if err != nil {
@@ -244,7 +236,6 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 // Performs pre allocation checks and allocates a devices based on the request
 func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	responses := pluginapi.AllocateResponse{}
-	envList := map[string][]string{}
 	iommufdSupported, err := supportsIOMMUFD()
 	if err != nil {
 		return nil, fmt.Errorf("could not determine iommufd support: %w", err)
@@ -282,13 +273,7 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 					})
 				}
 			}
-			if iommufdSupported {
-				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
-					HostPath:      iommuDevicePath,
-					ContainerPath: iommuDevicePath,
-					Permissions:   "mrw",
-				})
-			} else {
+			if !iommufdSupported {
 				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
 					HostPath:      filepath.Join(vfioDevicePath, "vfio"),
 					ContainerPath: filepath.Join(vfioDevicePath, "vfio"),
@@ -300,16 +285,8 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 					Permissions:   "mrw",
 				})
 			}
-
-			key := fmt.Sprintf("%s_%s", gpuPrefix, strings.ToUpper(dpi.deviceName))
-			if _, exists := envList[key]; !exists {
-				envList[key] = []string{}
-			}
-			envList[key] = append(envList[key], devAddrs...)
 		}
-		envs := buildEnv(envList)
 		response := pluginapi.ContainerAllocateResponse{
-			Envs:    envs,
 			Devices: deviceSpecs,
 		}
 		log.Printf("Allocated devices %v", response)
