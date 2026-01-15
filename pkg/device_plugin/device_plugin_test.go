@@ -30,239 +30,261 @@ package device_plugin
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/NVIDIA/go-nvlib/pkg/nvpci"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var deviceAddress1 = "1"
-var deviceAddress2 = "2"
-var deviceAddress3 = "3"
-var deviceAddress4 = "4"
-var deviceAddress5 = "5"
-var deviceAddress6 = "6"
-var deviceName = "1b80"
-var deviceName1 = "1b81"
-
-func getFakeLinkDevicePlugin(basePath string, deviceAddress string, link string) (string, error) {
-	if deviceAddress == deviceAddress1 {
-		if link == "driver" {
-			return "vfio-pci", nil
-		} else if link == "iommu_group" {
-			return "io_1", nil
-		}
-	} else if deviceAddress == deviceAddress2 {
-		if link == "driver" {
-			return "vfio-pci", nil
-		} else if link == "iommu_group" {
-			return "io_2", nil
-		}
-	} else if deviceAddress == deviceAddress3 {
-		if link == "driver" {
-			return "vfio-pci", nil
-		} else if link == "iommu_group" {
-			return "io_3", nil
-		}
-	} else if deviceAddress == deviceAddress5 {
-		if link == "driver" {
-			return "vfio-pci", nil
-		}
-	}
-	return "", errors.New("Incorrect operation")
-}
-
-func getFakeIDFromFileDevicePlugin(basePath string, deviceAddress string, link string) (string, error) {
-	if deviceAddress == deviceAddress1 || deviceAddress == deviceAddress4 || deviceAddress == deviceAddress5 {
-		if link == "vendor" {
-			return nvVendorID, nil
-		} else if link == "device" {
-			return deviceName, nil
-		}
-	} else if deviceAddress == deviceAddress2 {
-		if link == "vendor" {
-			return nvVendorID, nil
-		} else if link == "device" {
-			return deviceName1, nil
-		}
-	} else if deviceAddress == deviceAddress3 {
-		if link == "vendor" {
-			return nvVendorID, nil
-		}
-	}
-	return "", errors.New("Incorrect operation")
-}
-
 func fakeStartDevicePluginFunc(dp *GenericDevicePlugin) error {
-	if dp.deviceName == deviceName {
+	if dp.deviceName == "1b80" {
 		return errors.New("Incorrect operation")
 	}
 	return nil
 }
 
-func getFakeGpuIDforVpu(basePath string, deviceAddress string) (string, error) {
-	if deviceAddress == deviceAddress1 || deviceAddress == deviceAddress2 || deviceAddress == deviceAddress3 {
-		return "GpuId", nil
-	}
-	return "", errors.New("Incorrect operation")
-}
-
 var _ = Describe("Device Plugin", func() {
-	var workDir string
-	var linkDir string
-	var err error
-
-	Context("readLinkFunc() Tests", func() {
-		BeforeEach(func() {
-			linkDir, err = os.MkdirTemp("", "dp-test")
-			Expect(err).ToNot(HaveOccurred())
-
-			os.Mkdir(linkDir+"/vfio-pci", 0755)
-
-			workDir, err = os.MkdirTemp("", "kubevirt-test")
-			Expect(err).ToNot(HaveOccurred())
-
-			os.Mkdir(workDir+"/"+deviceAddress1, 0755)
-
-			os.Symlink(linkDir+"/vfio-pci", filepath.Join(workDir, deviceAddress1, "driver"))
-
-		})
-
-		It("Read driver with out error", func() {
-			driverID, err := readLinkFunc(workDir, deviceAddress1, "driver")
-			Expect(err).To(BeNil())
-			Expect(driverID).To(Equal("vfio-pci"))
-
-		})
-
-		It("Read driver from a missing location to throw error", func() {
-			driverID, err := readLinkFunc(workDir, deviceAddress1, "iommu_group")
-			Expect(err).ShouldNot(BeNil())
-			Expect(driverID).To(Equal(""))
-
-		})
-	})
-
-	Context("readIDFromFileFunc() Tests", func() {
-		BeforeEach(func() {
-			workDir, err = os.MkdirTemp("", "kubevirt-test")
-			Expect(err).ToNot(HaveOccurred())
-			err = os.Mkdir(workDir+"/1", 0755)
-			Expect(err).ToNot(HaveOccurred())
-			err = os.WriteFile(filepath.Join(workDir, deviceAddress1, "vendor"), []byte("0x10de"), 0644)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("Read driver with out error", func() {
-			driverID, err := readIDFromFileFunc(workDir, deviceAddress1, "vendor")
-			Expect(err).To(BeNil())
-			Expect(driverID).To(Equal(nvVendorID))
-		})
-
-		It("Read driver from a missing location to throw error", func() {
-			driverID, err := readIDFromFileFunc(workDir, deviceAddress1, "iommu_group")
-			Expect(err).ShouldNot(BeNil())
-			Expect(driverID).To(Equal(""))
-		})
-	})
-
 	Context("createIommuDeviceMap() Tests", func() {
-
 		BeforeEach(func() {
-			linkDir, err = os.MkdirTemp("", "dp-test")
-			Expect(err).ToNot(HaveOccurred())
-
-			workDir, err = os.MkdirTemp("", "kubevirt-test")
-			Expect(err).ToNot(HaveOccurred())
-			basePath = workDir
-			os.Mkdir(filepath.Join(linkDir, deviceAddress1), 0755)
-			os.Mkdir(filepath.Join(linkDir, deviceAddress2), 0755)
-			os.Mkdir(filepath.Join(linkDir, deviceAddress3), 0755)
-			os.Mkdir(filepath.Join(linkDir, deviceAddress4), 0755)
-			os.Mkdir(filepath.Join(linkDir, deviceAddress5), 0755)
-			os.Mkdir(filepath.Join(linkDir, deviceAddress6), 0755)
-
-			os.Symlink(filepath.Join(linkDir, deviceAddress1), filepath.Join(workDir, deviceAddress1))
-			os.Symlink(filepath.Join(linkDir, deviceAddress2), filepath.Join(workDir, deviceAddress2))
-			os.Symlink(filepath.Join(linkDir, deviceAddress3), filepath.Join(workDir, deviceAddress3))
-			os.Symlink(filepath.Join(linkDir, deviceAddress4), filepath.Join(workDir, deviceAddress4))
-			os.Symlink(filepath.Join(linkDir, deviceAddress5), filepath.Join(workDir, deviceAddress5))
-			os.Symlink(filepath.Join(linkDir, deviceAddress6), filepath.Join(workDir, deviceAddress6))
-
+			// Reset maps before each test
+			iommuMap = nil
+			deviceMap = nil
 		})
 
-		It("", func() {
-			readLink = getFakeLinkDevicePlugin
-			readIDFromFile = getFakeIDFromFileDevicePlugin
+		It("discovers GPUs bound to vfio-pci driver", func() {
+			// Setup mock nvpci
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:01:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCI3dControllerClass,
+							Device:     0x1b80,
+							DeviceName: "GeForce GTX 1080",
+							Driver:     "vfio-pci",
+							IommuGroup: 1,
+						},
+						{
+							Address:    "0000:02:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCI3dControllerClass,
+							Device:     0x1b81,
+							DeviceName: "GeForce GTX 1070",
+							Driver:     "vfio-pci",
+							IommuGroup: 2,
+						},
+					}, nil
+				},
+			}
 			startDevicePlugin = fakeStartDevicePluginFunc
+
 			createIommuDeviceMap()
 
-			iommuList := iommuMap["io_1"]
-			Expect(iommuList[0].addr).To(Equal("1"))
-			deviceList := deviceMap["1b80"]
-			Expect(deviceList[0]).To(Equal("io_1"))
+			Expect(iommuMap).To(HaveLen(2))
+			Expect(iommuMap["1"]).To(HaveLen(1))
+			Expect(iommuMap["1"][0].Address).To(Equal("0000:01:00.0"))
+			Expect(iommuMap["2"]).To(HaveLen(1))
+			Expect(iommuMap["2"][0].Address).To(Equal("0000:02:00.0"))
+
+			Expect(deviceMap).To(HaveLen(2))
+			Expect(deviceMap["1b80"]).To(ContainElement("1"))
+			Expect(deviceMap["1b81"]).To(ContainElement("2"))
+		})
+
+		It("discovers NVSwitches bound to vfio-pci driver", func() {
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:03:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCINvSwitchClass,
+							Device:     0x2000,
+							DeviceName: "NVSwitch",
+							Driver:     "vfio-pci",
+							IommuGroup: 3,
+						},
+					}, nil
+				},
+			}
+
+			createIommuDeviceMap()
+
+			Expect(iommuMap).To(HaveLen(1))
+			Expect(iommuMap["3"]).To(HaveLen(1))
+			Expect(iommuMap["3"][0].Address).To(Equal("0000:03:00.0"))
+			Expect(deviceMap["2000"]).To(ContainElement("3"))
+		})
+
+		It("skips devices not bound to vfio-pci driver", func() {
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:01:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCI3dControllerClass,
+							Device:     0x1b80,
+							DeviceName: "GeForce GTX 1080",
+							Driver:     "nvidia",
+							IommuGroup: 1,
+						},
+					}, nil
+				},
+			}
+
+			createIommuDeviceMap()
+
+			Expect(iommuMap).To(BeEmpty())
+			Expect(deviceMap).To(BeEmpty())
+		})
+
+		It("skips non-GPU non-NVSwitch devices", func() {
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:01:00.0",
+							Vendor:     0x10de,
+							Class:      0x020000, // Network controller
+							Device:     0x1234,
+							DeviceName: "Network Device",
+							Driver:     "vfio-pci",
+							IommuGroup: 1,
+						},
+					}, nil
+				},
+			}
+
+			createIommuDeviceMap()
+
+			Expect(iommuMap).To(BeEmpty())
+			Expect(deviceMap).To(BeEmpty())
+		})
+
+		It("creates device plugins for discovered devices", func() {
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:01:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCI3dControllerClass,
+							Device:     0x1b81,
+							DeviceName: "GeForce GTX 1070",
+							Driver:     "vfio-pci",
+							IommuGroup: 1,
+						},
+					}, nil
+				},
+			}
+			startDevicePlugin = fakeStartDevicePluginFunc
+
+			createIommuDeviceMap()
 
 			go createDevicePlugins()
-			time.Sleep(3 * time.Second)
+			time.Sleep(100 * time.Millisecond)
 			stop <- struct{}{}
+		})
 
+		It("tracks NVSwitch device IDs separately", func() {
+			nvpciLib = &nvpci.InterfaceMock{
+				GetAllDevicesFunc: func() ([]*nvpci.NvidiaPCIDevice, error) {
+					return []*nvpci.NvidiaPCIDevice{
+						{
+							Address:    "0000:01:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCI3dControllerClass,
+							Device:     0x1b80,
+							DeviceName: "GeForce GTX 1080",
+							Driver:     "vfio-pci",
+							IommuGroup: 1,
+						},
+						{
+							Address:    "0000:03:00.0",
+							Vendor:     0x10de,
+							Class:      nvpci.PCINvSwitchClass,
+							Device:     0x2000,
+							DeviceName: "NVSwitch",
+							Driver:     "vfio-pci",
+							IommuGroup: 3,
+						},
+					}, nil
+				},
+			}
+
+			createIommuDeviceMap()
+
+			// GPU should not be tracked as NVSwitch
+			Expect(isNVSwitchDeviceID("1b80")).To(BeFalse())
+			// NVSwitch should be tracked
+			Expect(isNVSwitchDeviceID("2000")).To(BeTrue())
+			// Device in iommuMap should have IsNVSwitch set correctly
+			Expect(iommuMap["1"][0].IsNVSwitch).To(BeFalse())
+			Expect(iommuMap["3"][0].IsNVSwitch).To(BeTrue())
 		})
 	})
 
-	Context("getDeviceName() Tests", func() {
+	Context("formatDeviceName() Tests", func() {
+		It("converts device name to uppercase", func() {
+			result := formatDeviceName("geforce gtx 1080")
+			Expect(result).To(Equal("GEFORCE_GTX_1080"))
+		})
 
+		It("replaces / and . with underscore", func() {
+			result := formatDeviceName("GK104.GL [GRID/K520]")
+			Expect(result).To(Equal("GK104_GL_GRID_K520"))
+		})
+
+		It("replaces multiple spaces with single underscore", func() {
+			result := formatDeviceName("GeForce   GTX  1080")
+			Expect(result).To(Equal("GEFORCE_GTX_1080"))
+		})
+
+		It("removes non-alphanumeric characters except underscore and hyphen", func() {
+			result := formatDeviceName("Device [Name] (Rev A)")
+			Expect(result).To(Equal("DEVICE_NAME_REV_A"))
+		})
+
+		It("returns empty string for empty input", func() {
+			result := formatDeviceName("")
+			Expect(result).To(Equal(""))
+		})
+	})
+
+	Context("getDeviceNameForID() Tests", func() {
 		BeforeEach(func() {
-			workDir, err = os.MkdirTemp("", "pci-test")
-			Expect(err).ToNot(HaveOccurred())
-			message := []byte(`
-8086  Intel Corporation
-	2331  DH89xxCC Chap Counter
-10de NVIDIA Corporation
-	118a  GK104GL [GRID K520]
-	118b  GK104GL [GRID K2 GeForce USM]
-	118d  gk104gl [grid k520]
-	118e gk104.gl [grid/k./520]
-	2331 GH100 [H100 PCIe]
-`)
-			err = os.WriteFile(filepath.Join(workDir, "pci.ids"), message, 0644)
-			Expect(err).ToNot(HaveOccurred())
+			// Setup test data in iommuMap
+			iommuMap = map[string][]NvidiaPCIDevice{
+				"1": {
+					{
+						Address:    "0000:01:00.0",
+						DeviceID:   0x1b80,
+						DeviceName: "GeForce GTX 1080",
+						IommuGroup: 1,
+					},
+				},
+				"2": {
+					{
+						Address:    "0000:02:00.0",
+						DeviceID:   0x1b81,
+						DeviceName: "GeForce GTX 1070",
+						IommuGroup: 2,
+					},
+				},
+			}
 		})
 
-		It("Retrives correct device name from pci.ids file", func() {
-			pciIdsFilePath = filepath.Join(workDir, "pci.ids")
-			deviceName := getDeviceName("118a")
-			Expect(deviceName).To(Equal("GK104GL_GRID_K520"))
+		It("returns formatted device name for existing device ID", func() {
+			result := getDeviceNameForID("1b80")
+			Expect(result).To(Equal("GEFORCE_GTX_1080"))
 		})
 
-		It("Returns blank if the device id is not present", func() {
-			deviceName := getDeviceName("abcd")
-			Expect(deviceName).To(Equal(""))
-		})
-
-		It("Returns blank if error reading the pci.ids file", func() {
-			pciIdsFilePath = filepath.Join(workDir, "fake")
-			deviceName := getDeviceName("118c")
-			Expect(deviceName).To(Equal(""))
-		})
-
-		It("Returns the device name from pci.ids in capital letters", func() {
-			pciIdsFilePath = filepath.Join(workDir, "pci.ids")
-			deviceName := getDeviceName("118d")
-			Expect(deviceName).To(Equal("GK104GL_GRID_K520"))
-		})
-
-		It("Replaces / and . with _", func() {
-			pciIdsFilePath = filepath.Join(workDir, "pci.ids")
-			deviceName := getDeviceName("118e")
-			Expect(deviceName).To(Equal("GK104_GL_GRID_K__520"))
-		})
-
-		It("Retrieves correct device name from pci.ids file even if another vendor's device shares device id", func() {
-			pciIdsFilePath = filepath.Join(workDir, "pci.ids")
-			deviceName := getDeviceName("2331")
-			Expect(deviceName).To(Equal("GH100_H100_PCIE"))
+		It("returns empty string for non-existent device ID", func() {
+			result := getDeviceNameForID("abcd")
+			Expect(result).To(Equal(""))
 		})
 	})
 })

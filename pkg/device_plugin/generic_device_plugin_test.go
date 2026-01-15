@@ -30,7 +30,6 @@ package device_plugin
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -47,10 +46,9 @@ var iommuGroup1 = "1"
 var iommuGroup2 = "2"
 var iommuGroup3 = "3"
 var iommuGroup4 = "4"
-var pciAddress1 = "11"
-var pciAddress2 = "22"
-var pciAddress3 = "33"
-var nvVendorID = "10de"
+var pciAddress1 = "0000:01:00.0"
+var pciAddress2 = "0000:02:00.0"
+var pciAddress3 = "0000:03:00.0"
 
 type fakeDevicePluginListAndWatchServer struct {
 	grpc.ServerStream
@@ -61,31 +59,30 @@ func (x *fakeDevicePluginListAndWatchServer) Send(m *pluginapi.ListAndWatchRespo
 	return nil
 }
 
-func getFakeIommuMap() map[string][]NvidiaGpuDevice {
-
-	var tempMap map[string][]NvidiaGpuDevice = make(map[string][]NvidiaGpuDevice)
-	tempMap[iommuGroup1] = append(tempMap[iommuGroup1], NvidiaGpuDevice{pciAddress1})
-	tempMap[iommuGroup2] = append(tempMap[iommuGroup2], NvidiaGpuDevice{pciAddress2})
-	tempMap[iommuGroup3] = append(tempMap[iommuGroup3], NvidiaGpuDevice{pciAddress3})
+func getFakeIommuMap() map[string][]NvidiaPCIDevice {
+	var tempMap = make(map[string][]NvidiaPCIDevice)
+	tempMap[iommuGroup1] = append(tempMap[iommuGroup1], NvidiaPCIDevice{
+		Address:    pciAddress1,
+		DeviceID:   0x1b80,
+		DeviceName: "GeForce GTX 1080",
+		IommuGroup: 1,
+		IommuFD:    "vfio3",
+	})
+	tempMap[iommuGroup2] = append(tempMap[iommuGroup2], NvidiaPCIDevice{
+		Address:    pciAddress2,
+		DeviceID:   0x1b81,
+		DeviceName: "GeForce GTX 1070",
+		IommuGroup: 2,
+		IommuFD:    "vfio4",
+	})
+	tempMap[iommuGroup3] = append(tempMap[iommuGroup3], NvidiaPCIDevice{
+		Address:    pciAddress3,
+		DeviceID:   0x1b82,
+		DeviceName: "GeForce GTX 1060",
+		IommuGroup: 3,
+		IommuFD:    "", // No IOMMUFD for this device
+	})
 	return tempMap
-}
-
-func getFakeLink(basePath string, deviceAddress string, link string) (string, error) {
-	if deviceAddress == pciAddress1 {
-		return iommuGroup1, nil
-	} else if deviceAddress == pciAddress2 {
-		return iommuGroup2, nil
-	} else {
-		return "", errors.New("Incorrect operation")
-	}
-}
-
-func getFakeIDFromFile(basePath string, deviceAddress string, link string) (string, error) {
-	if deviceAddress == pciAddress1 {
-		return nvVendorID, nil
-	}
-	return "", errors.New("Incorrect operation")
-
 }
 
 var _ = Describe("Generic Device", func() {
@@ -97,8 +94,6 @@ var _ = Describe("Generic Device", func() {
 
 	BeforeEach(func() {
 		returnIommuMap = getFakeIommuMap
-		readLink = getFakeLink
-		readIDFromFile = getFakeIDFromFile
 		var devs []*pluginapi.Device
 		workDir, err = os.MkdirTemp("", "kubevirt-test")
 		Expect(err).ToNot(HaveOccurred())
@@ -113,7 +108,6 @@ var _ = Describe("Generic Device", func() {
 		fileObj, err = os.Create(devicePath)
 		Expect(err).ToNot(HaveOccurred())
 		fileObj.Close()
-		basePath = workDir
 
 		devs = append(devs, &pluginapi.Device{
 			ID:     iommuGroup1,
@@ -126,7 +120,6 @@ var _ = Describe("Generic Device", func() {
 		dpi = NewGenericDevicePlugin("foo", workDir+"/", devs)
 		stop = make(chan struct{})
 		dpi.stop = stop
-
 	})
 
 	AfterEach(func() {
@@ -162,7 +155,7 @@ var _ = Describe("Generic Device", func() {
 		f, err := os.OpenFile(filepath.Join(workDir, "dev", "iommu"), os.O_RDONLY|os.O_CREATE, 0666)
 		Expect(err).ToNot(HaveOccurred())
 		f.Close()
-		Expect(os.MkdirAll(filepath.Join(workDir, pciAddress1, "vfio-dev", "vfio3"), 0744)).To(Succeed())
+
 		devs := []string{iommuGroup1}
 		containerRequests := pluginapi.ContainerAllocateRequest{DevicesIDs: devs}
 		requests := pluginapi.AllocateRequest{}
@@ -177,35 +170,31 @@ var _ = Describe("Generic Device", func() {
 		Expect(len(responses.GetContainerResponses()[0].Devices)).To(Equal(1))
 	})
 
-	It("Should not allocate a device and also throw an error", func() {
-		devs := []string{iommuGroup2}
-		containerRequests := pluginapi.ContainerAllocateRequest{DevicesIDs: devs}
-		requests := pluginapi.AllocateRequest{}
-		requests.ContainerRequests = append(requests.ContainerRequests, &containerRequests)
-		ctx := context.Background()
-		responses, _ := dpi.Allocate(ctx, &requests)
-		Expect(responses).To(BeNil())
-	})
+	It("Should fail allocation when iommufd is supported but device has no IommuFD", func() {
+		Expect(os.MkdirAll(filepath.Join(workDir, "dev"), 0744)).To(Succeed())
+		f, err := os.OpenFile(filepath.Join(workDir, "dev", "iommu"), os.O_RDONLY|os.O_CREATE, 0666)
+		Expect(err).ToNot(HaveOccurred())
+		f.Close()
 
-	It("Should not allocate a device and also throw an error", func() {
 		devs := []string{iommuGroup3}
 		containerRequests := pluginapi.ContainerAllocateRequest{DevicesIDs: devs}
 		requests := pluginapi.AllocateRequest{}
 		requests.ContainerRequests = append(requests.ContainerRequests, &containerRequests)
 		ctx := context.Background()
-		responses, _ := dpi.Allocate(ctx, &requests)
+		responses, err := dpi.Allocate(ctx, &requests)
+		Expect(err).ToNot(BeNil())
 		Expect(responses).To(BeNil())
 	})
 
-	It("Should not allocate a device but not throw an error", func() {
+	It("Should fail allocation for unknown iommu id", func() {
 		devs := []string{iommuGroup4}
 		containerRequests := pluginapi.ContainerAllocateRequest{DevicesIDs: devs}
 		requests := pluginapi.AllocateRequest{}
 		requests.ContainerRequests = append(requests.ContainerRequests, &containerRequests)
 		ctx := context.Background()
 		responses, err := dpi.Allocate(ctx, &requests)
-		Expect(err).To(BeNil())
-		Expect(responses.GetContainerResponses()[0].Envs[gpuPrefix]).To(Equal(""))
+		Expect(err).ToNot(BeNil())
+		Expect(responses).To(BeNil())
 	})
 
 	It("Should monitor health of device node", func() {
