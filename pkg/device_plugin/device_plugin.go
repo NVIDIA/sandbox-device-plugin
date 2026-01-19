@@ -64,6 +64,7 @@ var nvpciLib nvpci.Interface
 var startDevicePlugin = startDevicePluginFunc
 var stop = make(chan struct{})
 var PGPUAlias string
+var NVSwitchAlias string
 
 func InitiateDevicePlugin() {
 	// Initialize nvpci library if not already set (allows injection for testing)
@@ -99,14 +100,15 @@ func createDevicePlugins() {
 			})
 		}
 
-		// Determine device name - NVSwitches always use their actual name,
-		// GPUs can use PGPUAlias if set
+		// Determine device name - use alias if set, otherwise use actual device name
 		var deviceName string
 		if isNVSwitchDeviceID(deviceID) {
-			// NVSwitches always use their actual device name
-			deviceName = getDeviceNameForID(deviceID)
+			if NVSwitchAlias != "" {
+				deviceName = NVSwitchAlias
+			} else {
+				deviceName = getDeviceNameForID(deviceID)
+			}
 		} else if PGPUAlias != "" {
-			// GPUs can use the alias
 			deviceName = PGPUAlias
 		} else {
 			deviceName = getDeviceNameForID(deviceID)

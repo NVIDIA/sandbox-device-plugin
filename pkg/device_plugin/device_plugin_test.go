@@ -286,5 +286,26 @@ var _ = Describe("Device Plugin", func() {
 			result := getDeviceNameForID("abcd")
 			Expect(result).To(Equal(""))
 		})
+
+		It("formats device names with special characters through formatDeviceName", func() {
+			iommuMap = map[string][]NvidiaPCIDevice{
+				"1": {
+					{
+						Address:    "0000:01:00.0",
+						DeviceID:   0x2330,
+						DeviceName: "NVIDIA H100 PCIe [Hopper]",
+						IommuGroup: 1,
+					},
+				},
+			}
+			result := getDeviceNameForID("2330")
+			Expect(result).To(Equal("NVIDIA_H100_PCIE_HOPPER"))
+		})
+
+		It("returns empty string when iommuMap is empty", func() {
+			iommuMap = map[string][]NvidiaPCIDevice{}
+			result := getDeviceNameForID("1b80")
+			Expect(result).To(Equal(""))
+		})
 	})
 })

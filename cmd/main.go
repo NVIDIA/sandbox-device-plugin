@@ -35,5 +35,6 @@ import (
 
 func main() {
 	device_plugin.PGPUAlias = os.Getenv("P_GPU_ALIAS")
+	device_plugin.NVSwitchAlias = os.Getenv("NVSWITCH_ALIAS")
 	device_plugin.InitiateDevicePlugin()
 }

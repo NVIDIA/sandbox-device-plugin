@@ -68,7 +68,11 @@ func GenerateCDISpec() error {
 
 	// Generate NVSwitch CDI spec if we have NVSwitch devices
 	if len(nvSwitchDeviceIDs) > 0 {
-		if err := generateCDISpecForClass(cdiNVSwitchClass, true); err != nil {
+		nvSwitchClass := cdiNVSwitchClass
+		if NVSwitchAlias != "" {
+			nvSwitchClass = NVSwitchAlias
+		}
+		if err := generateCDISpecForClass(nvSwitchClass, true); err != nil {
 			return fmt.Errorf("failed to generate NVSwitch CDI spec: %w", err)
 		}
 	}
