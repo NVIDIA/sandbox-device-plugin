@@ -15,6 +15,10 @@
 name: CI Pipeline
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
   push:
     branches:
       - "pull-request/[0-9]+"

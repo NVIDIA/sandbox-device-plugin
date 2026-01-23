@@ -45,9 +45,6 @@ const (
 )
 
 var (
-	basePath = "/sys/bus/pci/devices"
-
 	// rootPath can be set for testing to simplify testing
-	rootPath       = "/"
-	pciIdsFilePath = "/usr/pci.ids"
+	rootPath = "/"
 )

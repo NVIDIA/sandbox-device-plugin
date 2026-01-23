@@ -1,24 +1,87 @@
 module github.com/nvidia/sandbox-device-plugin
 
-go 1.24.6
-
-toolchain go1.24.7
+go 1.25
 
 require (
+	github.com/NVIDIA/go-nvlib v0.9.0
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/golangci/golangci-lint v1.64.8
+	github.com/matryer/moq v0.6.0
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	google.golang.org/grpc v1.72.0
-	k8s.io/klog/v2 v2.130.1
 	k8s.io/kubelet v0.32.2
 	tags.cncf.io/container-device-interface v1.1.0
 	tags.cncf.io/container-device-interface/specs-go v1.1.0
 )
 
 require (
+	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
+	4d63.com/gochecknoglobals v0.2.2 // indirect
+	github.com/4meepo/tagalign v1.4.2 // indirect
+	github.com/Abirdcfly/dupword v0.1.3 // indirect
+	github.com/Antonboom/errname v1.0.0 // indirect
+	github.com/Antonboom/nilnil v1.0.1 // indirect
+	github.com/Antonboom/testifylint v1.5.2 // indirect
+	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
+	github.com/Crocmagnon/fatcontext v0.7.1 // indirect
+	github.com/Djarvur/go-err113 v0.0.0-20210108212216-aea10b59be24 // indirect
+	github.com/GaijinEntertainment/go-exhaustruct/v3 v3.3.1 // indirect
+	github.com/Masterminds/semver/v3 v3.3.0 // indirect
+	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
+	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
+	github.com/alexkohler/nakedret/v2 v2.0.5 // indirect
+	github.com/alexkohler/prealloc v1.0.0 // indirect
+	github.com/alingse/asasalint v0.0.11 // indirect
+	github.com/alingse/nilnesserr v0.1.2 // indirect
+	github.com/ashanbrown/forbidigo v1.6.0 // indirect
+	github.com/ashanbrown/makezero v1.2.0 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bkielbasa/cyclop v1.2.3 // indirect
+	github.com/blizzy78/varnamelen v0.8.0 // indirect
+	github.com/bombsimon/wsl/v4 v4.5.0 // indirect
+	github.com/breml/bidichk v0.3.2 // indirect
+	github.com/breml/errchkjson v0.4.0 // indirect
+	github.com/butuzov/ireturn v0.3.1 // indirect
+	github.com/butuzov/mirror v1.3.0 // indirect
+	github.com/catenacyber/perfsprint v0.8.2 // indirect
+	github.com/ccojocar/zxcvbn-go v1.0.2 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/charithe/durationcheck v0.0.10 // indirect
+	github.com/chavacava/garif v0.1.0 // indirect
+	github.com/ckaznocha/intrange v0.3.0 // indirect
+	github.com/curioswitch/go-reassign v0.3.0 // indirect
+	github.com/daixiang0/gci v0.13.5 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/denis-tingaikin/go-header v0.5.0 // indirect
+	github.com/ettle/strcase v0.2.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/fatih/structtag v1.2.0 // indirect
+	github.com/firefart/nonamedreturns v1.0.5 // indirect
+	github.com/fzipp/gocyclo v0.6.0 // indirect
+	github.com/ghostiam/protogetter v0.3.9 // indirect
+	github.com/go-critic/go-critic v0.12.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/go-toolsmith/astcast v1.1.0 // indirect
+	github.com/go-toolsmith/astcopy v1.1.0 // indirect
+	github.com/go-toolsmith/astequal v1.2.0 // indirect
+	github.com/go-toolsmith/astfmt v1.1.0 // indirect
+	github.com/go-toolsmith/astp v1.1.0 // indirect
+	github.com/go-toolsmith/strparse v1.1.0 // indirect
+	github.com/go-toolsmith/typep v1.1.0 // indirect
+	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+	github.com/go-xmlfmt/xmlfmt v1.1.3 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
+	github.com/golangci/go-printf-func-name v0.1.0 // indirect
+	github.com/golangci/gofmt v0.0.0-20250106114630-d62b90e6713d // indirect
+	github.com/golangci/misspell v0.6.0 // indirect
+	github.com/golangci/plugin-module-register v0.1.1 // indirect
+	github.com/golangci/revgrep v0.8.0 // indirect
+	github.com/golangci/unconvert v0.0.0-20240309020433-c5143eacb3ed // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/gordonklaus/ineffassign v0.1.0 // indirect
@@ -132,11 +195,14 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
-	golang.org/x/tools v0.28.0 // indirect
+	golang.org/x/tools v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
 	mvdan.cc/gofumpt v0.7.0 // indirect

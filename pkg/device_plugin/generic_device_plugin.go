@@ -38,7 +38,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -90,7 +89,8 @@ func waitForGrpcServer(socketPath string, timeout time.Duration) error {
 
 // dial establishes the gRPC communication with the registered device plugin.
 func connect(socketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
-	ctx, _ := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	c, err := grpc.DialContext(ctx, socketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
@@ -233,7 +233,7 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 	}
 }
 
-// Performs pre allocation checks and allocates a devices based on the request
+// Allocate performs allocation of devices based on the request
 func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	responses := pluginapi.AllocateResponse{}
 	iommufdSupported, err := supportsIOMMUFD()
@@ -242,33 +242,23 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 	}
 	for _, req := range reqs.ContainerRequests {
 		deviceSpecs := make([]*pluginapi.DeviceSpec, 0)
-		for _, iommuId := range req.DevicesIDs {
-			devAddrs := []string{}
-
+		for _, iommuID := range req.DevicesIDs {
 			returnedMap := returnIommuMap()
-			//Retrieve the devices associated with a Iommu group
-			nvDev := returnedMap[iommuId]
-			for _, dev := range nvDev {
-				_, err := readLink(basePath, dev.addr, "iommu_group")
-				if err != nil { // || iommuGroup != iommuId {
-					log.Println("IommuGroup has changed on the system ", dev.addr)
-					return nil, fmt.Errorf("invalid allocation request: unknown device: %s", dev.addr)
-				}
-				vendorID, err := readIDFromFile(basePath, dev.addr, "vendor")
-				if err != nil || vendorID != "10de" {
-					log.Println("Vendor has changed on the system ", dev.addr)
-					return nil, fmt.Errorf("invalid allocation request: unknown device: %s", dev.addr)
-				}
+			// Retrieve the devices associated with the IOMMU group/fd
+			nvDevs, ok := returnedMap[iommuID]
+			if !ok {
+				return nil, fmt.Errorf("invalid allocation request: unknown iommu id: %s", iommuID)
+			}
 
-				devAddrs = append(devAddrs, dev.addr)
+			for _, dev := range nvDevs {
+				log.Printf("Allocating device %s (IOMMU group: %d)", dev.Address, dev.IommuGroup)
 				if iommufdSupported {
-					vfiodev, err := readVFIODev(basePath, dev.addr)
-					if err != nil {
-						return nil, fmt.Errorf("could not determine iommufd device for device %s: %v", dev.addr, err)
+					if dev.IommuFD == "" {
+						return nil, fmt.Errorf("iommufd device not available for device %s", dev.Address)
 					}
 					deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
-						HostPath:      filepath.Join(vfioDevicePath, "devices", vfiodev),
-						ContainerPath: filepath.Join(vfioDevicePath, "devices", vfiodev),
+						HostPath:      filepath.Join(vfioDevicePath, "devices", dev.IommuFD),
+						ContainerPath: filepath.Join(vfioDevicePath, "devices", dev.IommuFD),
 						Permissions:   "mrw",
 					})
 				}
@@ -280,8 +270,8 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 					Permissions:   "mrw",
 				})
 				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
-					HostPath:      filepath.Join(vfioDevicePath, iommuId),
-					ContainerPath: filepath.Join(vfioDevicePath, iommuId),
+					HostPath:      filepath.Join(vfioDevicePath, iommuID),
+					ContainerPath: filepath.Join(vfioDevicePath, iommuID),
 					Permissions:   "mrw",
 				})
 			}
@@ -408,19 +398,4 @@ func supportsIOMMUFD() (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-func readVFIODev(basePath string, deviceAddress string) (string, error) {
-	content, err := os.ReadDir(filepath.Join(basePath, deviceAddress, "vfio-dev"))
-	if err != nil {
-		return "", err
-	}
-	for _, c := range content {
-		if !c.IsDir() {
-			continue
-		}
-		if strings.HasPrefix(c.Name(), "vfio") {
-			return c.Name(), nil
-		}
-	}
-	return "", fmt.Errorf("no iommufd device found")
 }
