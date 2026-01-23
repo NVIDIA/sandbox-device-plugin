@@ -72,7 +72,7 @@ func InitiateDevicePlugin() {
 	}
 	// Discover NVIDIA devices bound to vfio-pci driver
 	createIommuDeviceMap()
-	// Create and start device plugins
+	GenerateCDISpec()
 	createDevicePlugins()
 }
 

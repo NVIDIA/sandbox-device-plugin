@@ -38,6 +38,10 @@ const (
 	vfioDevicePath    = "/dev/vfio"
 	iommuDevicePath   = "/dev/iommu"
 	gpuPrefix         = "PCI_RESOURCE_NVIDIA_COM"
+	cdiRoot           = "/var/run/cdi"
+	cdiVendor         = "nvidia.com"
+	cdiGPUClass       = "pgpu"
+	cdiNVSwitchClass  = "nvswitch"
 )
 
 var (
