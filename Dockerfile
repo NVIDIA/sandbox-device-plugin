@@ -24,11 +24,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+FROM nvcr.io/nvidia/k8s-device-plugin:v0.17.0 as gfd
+
 FROM nvcr.io/nvidia/cuda:13.0.2-base-ubi9 as builder
 
 RUN yum install -y wget make gcc
 
-ARG GOLANG_VERSION=1.25.3
+ARG GOLANG_VERSION=1.25.6
 RUN set -eux; \
     \
     arch="$(uname -m)"; \
@@ -68,6 +70,7 @@ LABEL description="See summary"
 COPY --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/
 COPY --link --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/nvidia-kubevirt-gpu-device-plugin
 COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids
+COPY --from=gfd /usr/bin/gpu-feature-discovery /usr/bin/gpu-feature-discovery
 
 USER 0:0
 

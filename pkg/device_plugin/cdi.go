@@ -41,6 +41,10 @@ import (
 	"tags.cncf.io/container-device-interface/specs-go"
 )
 
+const (
+	kataCompatibleCDIVersion = "0.5.0"
+)
+
 // GenerateCDISpec generates CDI specifications for discovered VFIO devices.
 // GPUs use the PGPUAlias (or cdiGPUClass if not set) as the class name.
 // NVSwitches always use cdiNVSwitchClass as the class name.
@@ -63,6 +67,7 @@ func GenerateCDISpec() error {
 
 	// Generate GPU CDI spec
 	if err := generateCDISpecForClass(gpuClass, false); err != nil {
+		log.Println(err.Error())
 		return fmt.Errorf("failed to generate GPU CDI spec: %w", err)
 	}
 
@@ -73,6 +78,7 @@ func GenerateCDISpec() error {
 			nvSwitchClass = NVSwitchAlias
 		}
 		if err := generateCDISpecForClass(nvSwitchClass, true); err != nil {
+			log.Println(err.Error())
 			return fmt.Errorf("failed to generate NVSwitch CDI spec: %w", err)
 		}
 	}
@@ -134,12 +140,31 @@ func generateCDISpecForClass(class string, isNVSwitch bool) error {
 				)
 			}
 
+			cedits := specs.ContainerEdits{
+				DeviceNodes: deviceNodes,
+			}
+			// Add the same device multiple times with keys for meant for
+			// various use cases:
+			// key=idx: use case where cdi annotations are manually put
+			//   on pod spec e.g. 0,1,2 etc
+			// key=iommuKey e.g. 65 for /dev/vfio/65 in non-iommufd setup
+			//   and legacy device plugin case
+			// key=IommuFD e.g. vfio0 for /dev/vfio/devices/vfio0 for
+			//   iommufd support
 			deviceSpecs = append(deviceSpecs, specs.Device{
-				Name: fmt.Sprintf("%d", idx),
-				ContainerEdits: specs.ContainerEdits{
-					DeviceNodes: deviceNodes,
-				},
+				Name:           fmt.Sprintf("%d", idx),
+				ContainerEdits: cedits,
 			})
+			deviceSpecs = append(deviceSpecs, specs.Device{
+				Name:           fmt.Sprintf("%d", dev.IommuGroup),
+				ContainerEdits: cedits,
+			})
+			if dev.IommuFD != "" {
+				deviceSpecs = append(deviceSpecs, specs.Device{
+					Name:           dev.IommuFD,
+					ContainerEdits: cedits,
+				})
+			}
 			idx++
 			log.Printf("Added CDI device %d: address=%s, iommu=%s, class=%s",
 				idx-1, dev.Address, iommuKey, class)
@@ -153,7 +178,7 @@ func generateCDISpecForClass(class string, isNVSwitch bool) error {
 
 	// Create the CDI spec with vendor/class format (e.g., "nvidia.com/pgpu")
 	spec := &specs.Spec{
-		Version: specs.CurrentVersion,
+		Version: kataCompatibleCDIVersion,
 		Kind:    fmt.Sprintf("%s/%s", cdiVendor, class),
 		Devices: deviceSpecs,
 	}

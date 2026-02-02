@@ -132,6 +132,10 @@ func createDevicePlugins() {
 			devicePlugins = append(devicePlugins, dp)
 		}
 	}
+
+	// run GFD job
+	go runGFD()
+
 	<-stop
 
 	log.Printf("Shutting down device plugin controller")
