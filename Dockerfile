@@ -55,7 +55,7 @@ COPY . .
 
 RUN make build
 
-FROM nvcr.io/nvidia/distroless/go:v3.2.1-dev
+FROM nvcr.io/nvidia/distroless/go:v4.0.1-dev
 
 USER 0:0
 SHELL ["/busybox/sh", "-c"]
