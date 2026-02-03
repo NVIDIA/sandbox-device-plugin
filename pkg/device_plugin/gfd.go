@@ -48,6 +48,27 @@ const (
 	ctxTimeout = 5 * time.Second
 )
 
+func getGFDImageName(clientset *kubernetes.Clientset, namespace string) string {
+	// if there is an override on the image, then use that
+	gfdImage := os.Getenv("GFD_IMAGE")
+	if gfdImage != "" {
+		return gfdImage
+	}
+
+	// else use self image
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
+	defer cancel()
+	podName := os.Getenv("HOSTNAME")
+	pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Could not get self pod to obtain GFD_IMAGE")
+		return ""
+	}
+	gfdImage = pod.Spec.Containers[0].Image
+	log.Printf("Using %s as GFD Image", gfdImage)
+	return gfdImage
+}
+
 func runGFD() {
 	// 1. Get the Node Name from the environment (passed via Downward API)
 	nodeName := os.Getenv("NODE_NAME")
@@ -61,12 +82,6 @@ func runGFD() {
 		return
 	}
 
-	gfdImage := os.Getenv("GFD_IMAGE")
-	if gfdImage == "" {
-		log.Printf("GFD_IMAGE environment variable is required for running GFD")
-		return
-	}
-
 	// 2. Authenticate within the cluster
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -77,6 +92,11 @@ func runGFD() {
 	if err != nil {
 		log.Printf("Error obtaining clientset for GFD launch: %v", err.Error())
 		return
+	}
+
+	gfdImage := getGFDImageName(clientset, namespace)
+	if gfdImage == "" {
+		log.Printf("Error: No GFD Image available to run GFD")
 	}
 
 	err = WaitForKataRuntime(clientset, nodeName)
@@ -220,8 +240,7 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"/usr/bin/gpu-feature-discovery\n" +
-							"sleep 600\n",
+						"/usr/bin/gpu-feature-discovery; sleep 600\n",
 					},
 					Env: []corev1.EnvVar{
 						{Name: "MIG_STRATEGY", Value: "none"},

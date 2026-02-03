@@ -55,7 +55,11 @@ COPY . .
 
 RUN make build
 
-FROM nvcr.io/nvidia/distroless/go:v3.2.1
+FROM nvcr.io/nvidia/distroless/go:v3.2.1-dev
+
+USER 0:0
+SHELL ["/busybox/sh", "-c"]
+RUN ln -s /busybox/sh /bin/sh
 
 ARG VERSION
 
@@ -71,7 +75,5 @@ COPY --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /
 COPY --link --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/nvidia-kubevirt-gpu-device-plugin
 COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids
 COPY --from=gfd /usr/bin/gpu-feature-discovery /usr/bin/gpu-feature-discovery
-
-USER 0:0
 
 CMD ["nvidia-sandbox-device-plugin"]
