@@ -75,7 +75,14 @@ jobs:
       - name: Calculate build vars
         id: vars
         run: |
-          echo "COMMIT_SHORT_SHA=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+          COMMIT_SHORT_SHA="${GITHUB_SHA:0:8}"
+          echo "COMMIT_SHORT_SHA=${COMMIT_SHORT_SHA}" >> $GITHUB_ENV
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "VERSION_TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "VERSION_TAG=${COMMIT_SHORT_SHA}" >> $GITHUB_ENV
+          fi
+
           echo "LOWERCASE_REPO_OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | awk '{print tolower($0)}')" >> $GITHUB_ENV
 
           GENERATE_ARTIFACTS="false"
@@ -98,7 +105,7 @@ jobs:
       - name: Build Manifest
         if: ${{ env.GENERATE_ARTIFACTS == 'true' }}
         env:
-          MULTIARCH_IMAGE: ghcr.io/${{ env.LOWERCASE_REPO_OWNER }}/nvidia-sandbox-device-plugin:${{ env.COMMIT_SHORT_SHA }}
+          MULTIARCH_IMAGE: ghcr.io/${{ env.LOWERCASE_REPO_OWNER }}/nvidia-sandbox-device-plugin:${{ env.VERSION_TAG }}
         run: |
           docker buildx imagetools create \
             --tag ${MULTIARCH_IMAGE} \
