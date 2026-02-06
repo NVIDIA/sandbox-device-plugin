@@ -134,6 +134,10 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 	}
 	log.Printf("Runtime class for GFD pod: %s", runtimeClassName)
 
+	gpuClass := cdiGPUClass
+	if PGPUAlias != "" {
+		gpuClass = PGPUAlias
+	}
 	gpuQuantity := resource.MustParse("1")
 	// 3. Define the Pod
 	pod := &corev1.Pod{
@@ -159,10 +163,10 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
-							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", PGPUAlias)): gpuQuantity,
+							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", gpuClass)): gpuQuantity,
 						},
 						Requests: corev1.ResourceList{
-							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", PGPUAlias)): gpuQuantity,
+							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", gpuClass)): gpuQuantity,
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
