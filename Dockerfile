@@ -76,4 +76,4 @@ COPY --link --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-p
 COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids
 COPY --from=gfd /usr/bin/gpu-feature-discovery /usr/bin/gpu-feature-discovery
 
-CMD ["/usr/bin/nvidia-sandbox-device-plugin"]
+ENTRYPOINT ["/usr/bin/nvidia-sandbox-device-plugin"]
