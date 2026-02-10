@@ -143,31 +143,16 @@ func generateCDISpecForClass(class string, isNVSwitch bool) error {
 			cedits := specs.ContainerEdits{
 				DeviceNodes: deviceNodes,
 			}
-			// Add the same device multiple times with keys for meant for
-			// various use cases:
-			// key=idx: use case where cdi annotations are manually put
-			//   on pod spec e.g. 0,1,2 etc
-			// key=iommuKey e.g. 65 for /dev/vfio/65 in non-iommufd setup
-			//   and legacy device plugin case
-			// key=IommuFD e.g. vfio0 for /dev/vfio/devices/vfio0 for
-			//   iommufd support
+
 			deviceSpecs = append(deviceSpecs, specs.Device{
 				Name:           fmt.Sprintf("%d", idx),
 				ContainerEdits: cedits,
 			})
-			deviceSpecs = append(deviceSpecs, specs.Device{
-				Name:           fmt.Sprintf("%d", dev.IommuGroup),
-				ContainerEdits: cedits,
-			})
-			if dev.IommuFD != "" {
-				deviceSpecs = append(deviceSpecs, specs.Device{
-					Name:           dev.IommuFD,
-					ContainerEdits: cedits,
-				})
-			}
-			idx++
+
 			log.Printf("Added CDI device %d: address=%s, iommu=%s, class=%s",
-				idx-1, dev.Address, iommuKey, class)
+				idx, dev.Address, iommuKey, class)
+
+			idx++
 		}
 	}
 
