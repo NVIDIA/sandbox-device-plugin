@@ -140,7 +140,6 @@ func GenerateCDISpec() error {
 // maps to a VFIO device that can be requested by name (e.g., "nvidia.com/pgpu=0").
 func generateCDISpecForClass(class string, scopedIommuKeys []string) error {
 	var deviceSpecs []specs.Device
-	idx := 0
 
 	iommufdSupported, err := supportsIOMMUFD()
 	if err != nil {
@@ -186,14 +185,12 @@ func generateCDISpecForClass(class string, scopedIommuKeys []string) error {
 			}
 
 			deviceSpecs = append(deviceSpecs, specs.Device{
-				Name:           fmt.Sprintf("%d", idx),
+				Name:           iommuKey,
 				ContainerEdits: cedits,
 			})
 
-			log.Printf("Added CDI device %d: address=%s, iommu=%s, class=%s",
-				idx, dev.Address, iommuKey, class)
-
-			idx++
+			log.Printf("Added CDI device %s: address=%s, class=%s",
+				iommuKey, dev.Address, class)
 		}
 	}
 
