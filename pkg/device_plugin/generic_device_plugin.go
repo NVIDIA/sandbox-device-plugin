@@ -250,9 +250,9 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 				return nil, fmt.Errorf("invalid allocation request: unknown iommu id: %s", iommuID)
 			}
 
-			for _, dev := range nvDevs {
-				log.Printf("Allocating device %s (IOMMU group: %d)", dev.Address, dev.IommuGroup)
-				if iommufdSupported {
+			if iommufdSupported {
+				for _, dev := range nvDevs {
+					log.Printf("iommufd: allocating device %s (iommufd: %s)", dev.Address, dev.IommuFD)
 					if dev.IommuFD == "" {
 						return nil, fmt.Errorf("iommufd device not available for device %s", dev.Address)
 					}
@@ -262,8 +262,10 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 						Permissions:   "mrw",
 					})
 				}
-			}
-			if !iommufdSupported {
+			} else {
+				for _, dev := range nvDevs {
+					log.Printf("vfio: allocating device %s (IOMMU group: %d)", dev.Address, dev.IommuGroup)
+				}
 				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
 					HostPath:      filepath.Join(vfioDevicePath, "vfio"),
 					ContainerPath: filepath.Join(vfioDevicePath, "vfio"),
