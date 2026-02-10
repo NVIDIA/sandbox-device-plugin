@@ -38,7 +38,6 @@ const (
 	vfioDevicePath    = "/dev/vfio"
 	iommuDevicePath   = "/dev/iommu"
 	gpuPrefix         = "PCI_RESOURCE_NVIDIA_COM"
-	cdiRoot           = "/var/run/cdi"
 	cdiVendor         = "nvidia.com"
 	cdiGPUClass       = "pgpu"
 	cdiNVSwitchClass  = "nvswitch"
@@ -47,4 +46,10 @@ const (
 var (
 	// rootPath can be set for testing to simplify testing
 	rootPath = "/"
+	// cdiRoot can be set for testing to redirect CDI spec output
+	cdiRoot = "/var/run/cdi"
 )
+
+func setCdiRoot(path string) {
+	cdiRoot = path
+}
