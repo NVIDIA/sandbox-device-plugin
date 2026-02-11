@@ -134,7 +134,9 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 	}
 	log.Printf("Runtime class for GFD pod: %s", runtimeClassName)
 
+	resourceName := fmt.Sprintf("%s/%s", DeviceNamespace, getGPUDeviceName())
 	gpuQuantity := resource.MustParse("1")
+
 	// 3. Define the Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,10 +161,10 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
-							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", PGPUAlias)): gpuQuantity,
+							corev1.ResourceName(resourceName): gpuQuantity,
 						},
 						Requests: corev1.ResourceList{
-							corev1.ResourceName(fmt.Sprintf("nvidia.com/%s", PGPUAlias)): gpuQuantity,
+							corev1.ResourceName(resourceName): gpuQuantity,
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{
@@ -292,4 +294,31 @@ func WaitForKataRuntime(clientset *kubernetes.Clientset, nodeName string) error 
 		log.Printf("Finished: Could not find label after %d attempts. Error: %v\n", backoff.Steps, err)
 	}
 	return err
+}
+
+func getGPUDeviceName() string {
+	for deviceID, _ := range deviceMap {
+		// Determine device name - skip nvswitch
+		var deviceName string
+		if isNVSwitchDeviceID(deviceID) {
+			continue
+		}
+
+		if PGPUAlias != "" {
+			deviceName = PGPUAlias
+		} else {
+			deviceName = getDeviceNameForID(deviceID)
+		}
+
+		if deviceName == "" {
+			log.Printf("Error: Could not find device name for device id: %s", deviceID)
+			deviceName = deviceID
+		}
+		// return the first valid GPU device name, in case of heterogeneous nodes, this
+		// will be insufficent, but we are limited by GFD labeling
+		return deviceName
+	}
+	// this will cause a failure
+	log.Printf("Error finding a suitable GPU device for GFD pod: %v", deviceMap)
+	return ""
 }
