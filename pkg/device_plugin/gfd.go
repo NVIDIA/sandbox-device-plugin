@@ -82,6 +82,12 @@ func runGFD() {
 		return
 	}
 
+	saName := os.Getenv("POD_SERVICE_ACCOUNT")
+	if saName == "" {
+		log.Printf("POD_SERVICE_ACCOUNT environment variable is required for running GFD")
+		return
+	}
+
 	// 2. Authenticate within the cluster
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -106,7 +112,7 @@ func runGFD() {
 	}
 
 	// 3. Create the gfd pod and delete when its done
-	gfdPod := createGFDPod(clientset, nodeName, namespace, gfdImage)
+	gfdPod := createGFDPod(clientset, nodeName, namespace, gfdImage, saName)
 	err = LaunchPodWithRetries(clientset, gfdPod, namespace)
 	if err != nil {
 		log.Printf("Error creating GFD pod: %v", err.Error())
@@ -122,7 +128,7 @@ func runGFD() {
 	return
 }
 
-func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage string) *corev1.Pod {
+func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage, saName string) *corev1.Pod {
 	var trueValue bool = true
 	var runtimeClassName string = "kata-qemu-nvidia-gpu"
 	// check if this is an snp machine with ConfidentialContainers enabled
@@ -152,7 +158,7 @@ func createGFDPod(clientset *kubernetes.Clientset, nodeName, namespace, gfdImage
 			NodeName:           nodeName, // This forces the pod to land on the specific node
 			RestartPolicy:      corev1.RestartPolicyOnFailure,
 			RuntimeClassName:   &runtimeClassName,
-			ServiceAccountName: "nvidia-sandbox-device-plugin",
+			ServiceAccountName: saName,
 			Containers: []corev1.Container{
 				{
 					Name:    "gpu-feature-discovery",
