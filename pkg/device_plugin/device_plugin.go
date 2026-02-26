@@ -133,7 +133,9 @@ func createDevicePlugins() {
 	}
 
 	// run GFD job
-	go runGFD()
+	if EnableGFD {
+		go runGFD()
+	}
 
 	<-stop
 
