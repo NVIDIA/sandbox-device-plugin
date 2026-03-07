@@ -31,10 +31,12 @@ package main
 import (
 	"github.com/nvidia/sandbox-device-plugin/pkg/device_plugin"
 	"os"
+	"strconv"
 )
 
 func main() {
 	var ok bool
+	var enableGFDFlag string
 	device_plugin.PGPUAlias, ok = os.LookupEnv("P_GPU_ALIAS")
 	if !ok {
 		device_plugin.PGPUAlias = "pgpu"
@@ -42,6 +44,11 @@ func main() {
 	device_plugin.NVSwitchAlias, ok = os.LookupEnv("NVSWITCH_ALIAS")
 	if !ok {
 		device_plugin.NVSwitchAlias = "nvswitch"
+	}
+	enableGFDFlag, ok = os.LookupEnv("ENABLE_GFD")
+	// default is true
+	if ok {
+		device_plugin.EnableGFD, _ = strconv.ParseBool(enableGFDFlag)
 	}
 	device_plugin.InitiateDevicePlugin()
 }
