@@ -30,6 +30,9 @@ jobs:
           - amd64
 #          - arm64
     runs-on: linux-${{ matrix.arch }}-cpu4
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         name: Check out code
