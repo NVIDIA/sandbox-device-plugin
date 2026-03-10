@@ -72,7 +72,6 @@ LABEL summary="NVIDIA Sandbox Device Plugin"
 LABEL description="See summary"
 
 COPY --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/
-COPY --link --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/nvidia-kubevirt-gpu-device-plugin
 COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids
 COPY --from=gfd /usr/bin/gpu-feature-discovery /usr/bin/gpu-feature-discovery
 

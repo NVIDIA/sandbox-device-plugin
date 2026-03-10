@@ -29,7 +29,11 @@ jobs:
         arch:
           - amd64
 #          - arm64
-    runs-on: ubuntu-latest
+    runs-on: linux-${{ matrix.arch }}-cpu4
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
         name: Check out code
@@ -57,10 +61,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Go Proxy
+        id: setup-go-proxy
+        uses: nv-gha-runners/setup-artifactory-go-proxy@main
       - name: Build image
         env:
           IMAGE_NAME: ghcr.io/${LOWERCASE_REPO_OWNER}/nvidia-sandbox-device-plugin
           VERSION: ${COMMIT_SHORT_SHA}-${{ matrix.arch }}
+          GOPROXY: ${{ steps.setup-go-proxy.outputs.goproxy-url }}
           DOCKER_BUILD_PLATFORM_OPTIONS: "--platform=linux/${{ matrix.arch }}"
         run: |
           echo "${VERSION}"

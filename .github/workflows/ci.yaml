@@ -15,17 +15,12 @@
 name: CI Pipeline
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
   push:
     tags:
       - "*"
     branches:
       - "pull-request/[0-9]+"
       - main
-      - ci
       - release-*
 
 jobs:
