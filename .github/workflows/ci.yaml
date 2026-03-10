@@ -15,10 +15,6 @@
 name: CI Pipeline
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
   push:
     tags:
       - "*"
