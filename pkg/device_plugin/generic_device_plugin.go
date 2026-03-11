@@ -328,6 +328,11 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 	var path = dpi.devicePath
 	var health = ""
 
+	iommufdSupported, err := supportsIOMMUFD()
+	if err != nil {
+		return fmt.Errorf("could not determine iommufd support: %w", err)
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Printf("%s: Unable to create fsnotify watcher: %v", method, err)
@@ -350,7 +355,11 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 	}
 
 	for _, dev := range dpi.devs {
-		devicePath := filepath.Join(path, dev.ID)
+		devID := dev.ID
+		if iommufdSupported {
+			devID = fmt.Sprintf("vfio%s", dev.ID)
+		}
+		devicePath := filepath.Join(path, devID)
 		err = watcher.Add(devicePath)
 		log.Printf(" Adding Watcher to Path : %v", devicePath)
 		pathDeviceMap[devicePath] = dev.ID
