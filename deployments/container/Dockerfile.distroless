@@ -33,7 +33,7 @@ RUN yum install -y wget make gcc
 ARG GOPROXY="https://proxy.golang.org,direct"
 ENV GOPROXY=$GOPROXY
 
-ARG GOLANG_VERSION=1.25.6
+ARG GOLANG_VERSION=1.25.7
 RUN set -eux; \
     \
     arch="$(uname -m)"; \
