@@ -26,7 +26,7 @@
 
 FROM nvcr.io/nvidia/k8s-device-plugin:v0.18.2 as gfd
 
-FROM nvcr.io/nvidia/cuda:13.0.2-base-ubi9 as builder
+FROM nvcr.io/nvidia/cuda:13.1.1-base-ubi9 as builder
 
 RUN yum install -y wget make gcc
 
@@ -58,7 +58,7 @@ COPY . .
 
 RUN make build
 
-FROM nvcr.io/nvidia/distroless/go:v3.2.1-dev
+FROM nvcr.io/nvidia/distroless/go:v4.0.2-dev
 
 USER 0:0
 SHELL ["/busybox/sh", "-c"]
