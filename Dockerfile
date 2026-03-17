@@ -26,7 +26,7 @@
 
 FROM nvcr.io/nvidia/k8s-device-plugin:v0.18.2 as gfd
 
-FROM nvcr.io/nvidia/cuda:13.1.1-base-ubi9 as builder
+FROM nvcr.io/nvidia/cuda:13.2.0-base-ubi9 as builder
 
 RUN yum install -y wget make gcc
 
