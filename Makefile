@@ -37,9 +37,9 @@ coverage:
 	go tool cover -html=coverage.out
 clean:
 	rm -f nvidia-sandbox-device-plugin && rm -rf coverage.out
-build-image:
+build-local-image:
 	docker build . -t $(DOCKER_REPO):$(DOCKER_TAG) 
-push-image: build-image
+push-image: build-local-image
 	 docker push $(DOCKER_REPO):$(DOCKER_TAG)
 update-pcidb:
 	wget $(PCI_IDS_URL) -O $(CURDIR)/utils/pci.ids
