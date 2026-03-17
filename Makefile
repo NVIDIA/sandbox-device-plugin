@@ -24,6 +24,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+##### Global variables #####
+include $(CURDIR)/versions.mk
+
 DOCKER_REPO ?= "nvcr.io/nvidia/sandbox-device-plugin"
 DOCKER_TAG ?= v1.4.1
 
@@ -38,7 +41,16 @@ coverage:
 clean:
 	rm -f nvidia-sandbox-device-plugin && rm -rf coverage.out
 build-local-image:
-	docker build . -t $(DOCKER_REPO):$(DOCKER_TAG) 
+	docker build \
+		--build-arg GOLANG_VERSION="$(GOLANG_VERSION)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
+		--build-arg CVE_UPDATES="$(CVE_UPDATES)" \
+		--build-arg GOPROXY="$(GOPROXY)" \
+		--build-arg DISTROLESS_BASE_IMAGE="$(DISTROLESS_BASE_IMAGE)" \
+		--build-arg BUILDER_IMAGE="$(BUILDER_IMAGE)" \
+		--build-arg GFD_IMAGE="$(GFD_IMAGE)" \
+		. -t $(DOCKER_REPO):$(DOCKER_TAG)
 push-image: build-local-image
 	 docker push $(DOCKER_REPO):$(DOCKER_TAG)
 update-pcidb:
