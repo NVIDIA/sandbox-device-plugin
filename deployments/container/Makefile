@@ -64,6 +64,9 @@ $(BUILD_TARGETS): build-%:
 		--build-arg GIT_COMMIT="$(GIT_COMMIT)" \
 		--build-arg CVE_UPDATES="$(CVE_UPDATES)" \
 		--build-arg GOPROXY="$(GOPROXY)" \
+		--build-arg DISTROLESS_BASE_IMAGE="$(DISTROLESS_BASE_IMAGE)" \
+		--build-arg BUILDER_IMAGE="$(BUILDER_IMAGE)" \
+		--build-arg GFD_IMAGE="$(GFD_IMAGE)" \
 		--file $(DOCKERFILE) \
 		$(CURDIR)
 ifeq ($(PUSH_ON_BUILD),true)

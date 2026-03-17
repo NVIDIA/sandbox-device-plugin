@@ -24,9 +24,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-FROM nvcr.io/nvidia/k8s-device-plugin:v0.18.2 as gfd
+ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.19.0
+ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.2.0-base-ubi9
+ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.0.2-dev
 
-FROM nvcr.io/nvidia/cuda:13.2.0-base-ubi9 as builder
+FROM ${GFD_IMAGE} as gfd
+
+FROM ${BUILDER_IMAGE} as builder
 
 RUN yum install -y wget make gcc
 
@@ -55,7 +59,7 @@ COPY . .
 
 RUN make build
 
-FROM nvcr.io/nvidia/distroless/go:v4.0.2-dev
+FROM ${DISTROLESS_BASE_IMAGE}
 
 USER 0:0
 SHELL ["/busybox/sh", "-c"]
