@@ -81,12 +81,19 @@ func InitiateDevicePlugin() {
 func createDevicePlugins() {
 	var devicePlugins []*GenericDevicePlugin
 	var devs []*pluginapi.Device
-	iommufdSupported, err := supportsIOMMUFD()
+
+	iommufdSupported, noIOMMU, err := vfioBackendSupport()
 	if err != nil {
-		log.Printf("Could not find if IOMMU FD is supported: %v", err)
+		log.Printf("Could not determine vfio backend support: %v", err)
 		return
 	}
+
 	log.Printf("iommufd supported: %v", iommufdSupported)
+	log.Printf("enable_unsafe_noiommu_mode: %v", noIOMMU)
+	if noIOMMU {
+		log.Printf("WARNING: VFIO enable_unsafe_noiommu_mode is enabled. This is not recommended as devices may be able to DMA across VM boundaries.")
+	}
+
 	log.Printf("Device map: %v", deviceMap)
 
 	// Iterate over deviceMap to create device plugin for each type of device on the host
@@ -120,7 +127,9 @@ func createDevicePlugins() {
 
 		log.Printf("Registering device plugin %q with %d device(s)", deviceName, len(devs))
 		devicePath := "/dev/vfio/"
-		if iommufdSupported {
+		// IOMMUFD does not currently support enable_unsafe_noiommu_mode, so if that mode is enabled we have to use the
+		// legacy IOMMU group paths even if IOMMUFD is supported.
+		if iommufdSupported && !noIOMMU {
 			devicePath = "/dev/vfio/devices/"
 		}
 		dp := NewGenericDevicePlugin(deviceName, devicePath, devs)

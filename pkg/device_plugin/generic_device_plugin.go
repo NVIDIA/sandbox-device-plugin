@@ -38,6 +38,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -240,6 +241,10 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 	if err != nil {
 		return nil, fmt.Errorf("could not determine iommufd support: %w", err)
 	}
+	noIOMMU, err := supportsNoIOMMU()
+	if err != nil {
+		return nil, fmt.Errorf("could not determine noiommu mode: %w", err)
+	}
 	for _, req := range reqs.ContainerRequests {
 		deviceSpecs := make([]*pluginapi.DeviceSpec, 0)
 		for _, iommuID := range req.DevicesIDs {
@@ -250,7 +255,7 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 				return nil, fmt.Errorf("invalid allocation request: unknown iommu id: %s", iommuID)
 			}
 
-			if iommufdSupported {
+			if iommufdSupported && !noIOMMU {
 				for _, dev := range nvDevs {
 					log.Printf("iommufd: allocating device %s (iommufd: %s)", dev.Address, dev.IommuFD)
 					if dev.IommuFD == "" {
@@ -263,8 +268,12 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 					})
 				}
 			} else {
+				groupName := iommuID
+				if noIOMMU {
+					groupName = noiommuGroupPrefix + iommuID
+				}
 				for _, dev := range nvDevs {
-					log.Printf("vfio: allocating device %s (IOMMU group: %d)", dev.Address, dev.IommuGroup)
+					log.Printf("vfio: allocating device %s (IOMMU group: %d, noiommu: %v)", dev.Address, dev.IommuGroup, noIOMMU)
 				}
 				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
 					HostPath:      filepath.Join(vfioDevicePath, "vfio"),
@@ -272,8 +281,8 @@ func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 					Permissions:   "mrw",
 				})
 				deviceSpecs = append(deviceSpecs, &pluginapi.DeviceSpec{
-					HostPath:      filepath.Join(vfioDevicePath, iommuID),
-					ContainerPath: filepath.Join(vfioDevicePath, iommuID),
+					HostPath:      filepath.Join(vfioDevicePath, groupName),
+					ContainerPath: filepath.Join(vfioDevicePath, groupName),
 					Permissions:   "mrw",
 				})
 			}
@@ -328,9 +337,9 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 	var path = dpi.devicePath
 	var health = ""
 
-	iommufdSupported, err := supportsIOMMUFD()
+	iommufdSupported, noIOMMU, err := vfioBackendSupport()
 	if err != nil {
-		return fmt.Errorf("could not determine iommufd support: %w", err)
+		return fmt.Errorf("could not determine vfio backend support: %w", err)
 	}
 
 	watcher, err := fsnotify.NewWatcher()
@@ -358,6 +367,8 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 		devID := dev.ID
 		if iommufdSupported {
 			devID = fmt.Sprintf("vfio%s", dev.ID)
+		} else if noIOMMU {
+			devID = noiommuGroupPrefix + dev.ID
 		}
 		devicePath := filepath.Join(path, devID)
 		err = watcher.Add(devicePath)
@@ -409,4 +420,37 @@ func supportsIOMMUFD() (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// vfioBackendSupport checks for support of different vfio backend modes (IOMMUFD, noIOMMU) and returns the results as booleans.
+func vfioBackendSupport() (iommufd, noIOMMU bool, err error) {
+	hasIOMMUFD, err := supportsIOMMUFD()
+	if err != nil {
+		return false, false, fmt.Errorf("could not determine IOMMUFD support: %w", err)
+	}
+
+	hasNoIOMMU, err := supportsNoIOMMU()
+	if err != nil {
+		return false, false, fmt.Errorf("could not determine noIOMMU mode support: %w", err)
+	}
+
+	// When enable_unsafe_noiommu_mode is enabled, only the legacy VFIO interface is available.
+	// IOMMUFD does not yet support this mode, so even if the kernel provides the cdev, we have to use the legacy VFIO interface.
+	iommufd = hasIOMMUFD && !hasNoIOMMU
+	noIOMMU = hasNoIOMMU
+	return iommufd, noIOMMU, nil
+}
+
+// supportsNoIOMMU returns true when the vfio module is running with
+// enable_unsafe_noiommu_mode=Y.  In that mode the group device files are
+// named /dev/vfio/noiommu-<group> instead of /dev/vfio/<group>.
+func supportsNoIOMMU() (bool, error) {
+	content, err := os.ReadFile(filepath.Join(rootPath, vfioNoIOMMUParamPath))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return strings.TrimSpace(string(content)) == "Y", nil
 }

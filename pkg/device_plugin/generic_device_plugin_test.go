@@ -85,6 +85,74 @@ func getFakeIommuMap() map[string][]NvidiaPCIDevice {
 	return tempMap
 }
 
+var _ = Describe("vfioBackendSupport", func() {
+	var workDir string
+
+	BeforeEach(func() {
+		var err error
+		workDir, err = os.MkdirTemp("", "vfio-backend-test")
+		Expect(err).ToNot(HaveOccurred())
+		rootPath = workDir
+	})
+
+	AfterEach(func() {
+		os.RemoveAll(workDir)
+	})
+
+	writeNoIOMMUParam := func(value string) {
+		dir := filepath.Join(workDir, "sys", "module", "vfio", "parameters")
+		Expect(os.MkdirAll(dir, 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(dir, "enable_unsafe_noiommu_mode"), []byte(value), 0444)).To(Succeed())
+	}
+
+	createIOMMUFD := func() {
+		Expect(os.MkdirAll(filepath.Join(workDir, "dev"), 0755)).To(Succeed())
+		f, err := os.OpenFile(filepath.Join(workDir, "dev", "iommu"), os.O_RDONLY|os.O_CREATE, 0666)
+		Expect(err).ToNot(HaveOccurred())
+		f.Close()
+	}
+
+	It("returns false/false when neither iommufd nor noiommu is present", func() {
+		iommufd, noIOMMU, err := vfioBackendSupport()
+		Expect(err).To(BeNil())
+		Expect(iommufd).To(BeFalse())
+		Expect(noIOMMU).To(BeFalse())
+	})
+
+	It("returns iommufd=true/noIOMMU=false when only /dev/iommu is present", func() {
+		createIOMMUFD()
+		iommufd, noIOMMU, err := vfioBackendSupport()
+		Expect(err).To(BeNil())
+		Expect(iommufd).To(BeTrue())
+		Expect(noIOMMU).To(BeFalse())
+	})
+
+	It("returns iommufd=false/noIOMMU=true when only noiommu mode is enabled", func() {
+		writeNoIOMMUParam("Y\n")
+		iommufd, noIOMMU, err := vfioBackendSupport()
+		Expect(err).To(BeNil())
+		Expect(iommufd).To(BeFalse())
+		Expect(noIOMMU).To(BeTrue())
+	})
+
+	It("suppresses iommufd when both /dev/iommu and noiommu mode are present", func() {
+		createIOMMUFD()
+		writeNoIOMMUParam("Y\n")
+		iommufd, noIOMMU, err := vfioBackendSupport()
+		Expect(err).To(BeNil())
+		Expect(iommufd).To(BeFalse(), "iommufd should be suppressed in noiommu mode")
+		Expect(noIOMMU).To(BeTrue())
+	})
+
+	It("returns iommufd=false/noIOMMU=false when noiommu param is N", func() {
+		writeNoIOMMUParam("N\n")
+		iommufd, noIOMMU, err := vfioBackendSupport()
+		Expect(err).To(BeNil())
+		Expect(iommufd).To(BeFalse())
+		Expect(noIOMMU).To(BeFalse())
+	})
+})
+
 var _ = Describe("Generic Device", func() {
 	var workDir string
 	var err error
@@ -184,6 +252,29 @@ var _ = Describe("Generic Device", func() {
 		responses, err := dpi.Allocate(ctx, &requests)
 		Expect(err).ToNot(BeNil())
 		Expect(responses).To(BeNil())
+	})
+
+	It("Should allocate a device without error in noiommu mode", func() {
+		Expect(os.MkdirAll(filepath.Join(workDir, "sys", "module", "vfio", "parameters"), 0744)).To(Succeed())
+		Expect(os.WriteFile(
+			filepath.Join(workDir, "sys", "module", "vfio", "parameters", "enable_unsafe_noiommu_mode"),
+			[]byte("Y\n"), 0444,
+		)).To(Succeed())
+
+		devs := []string{iommuGroup1}
+		containerRequests := pluginapi.ContainerAllocateRequest{DevicesIDs: devs}
+		requests := pluginapi.AllocateRequest{}
+		requests.ContainerRequests = append(requests.ContainerRequests, &containerRequests)
+		ctx := context.Background()
+		responses, err := dpi.Allocate(ctx, &requests)
+		Expect(err).To(BeNil())
+		Expect(responses.GetContainerResponses()[0].Envs).To(BeNil())
+		Expect(responses.GetContainerResponses()[0].Devices[0].HostPath).To(Equal("/dev/vfio/vfio"))
+		Expect(responses.GetContainerResponses()[0].Devices[0].ContainerPath).To(Equal("/dev/vfio/vfio"))
+		Expect(responses.GetContainerResponses()[0].Devices[0].Permissions).To(Equal("mrw"))
+		Expect(responses.GetContainerResponses()[0].Devices[1].HostPath).To(Equal("/dev/vfio/noiommu-1"))
+		Expect(responses.GetContainerResponses()[0].Devices[1].ContainerPath).To(Equal("/dev/vfio/noiommu-1"))
+		Expect(responses.GetContainerResponses()[0].Devices[1].Permissions).To(Equal("mrw"))
 	})
 
 	It("Should fail allocation for unknown iommu id", func() {

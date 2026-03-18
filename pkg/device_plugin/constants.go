@@ -33,12 +33,14 @@ import (
 )
 
 const (
-	DeviceNamespace   = "nvidia.com"
-	connectionTimeout = 5 * time.Second
-	vfioDevicePath    = "/dev/vfio"
-	iommuDevicePath   = "/dev/iommu"
-	gpuPrefix         = "PCI_RESOURCE_NVIDIA_COM"
-	cdiVendor         = "nvidia.com"
+	DeviceNamespace        = "nvidia.com"
+	connectionTimeout      = 5 * time.Second
+	vfioDevicePath         = "/dev/vfio"
+	iommuDevicePath        = "/dev/iommu"
+	gpuPrefix              = "PCI_RESOURCE_NVIDIA_COM"
+	cdiVendor              = "nvidia.com"
+	vfioNoIOMMUParamPath   = "/sys/module/vfio/parameters/enable_unsafe_noiommu_mode"
+	noiommuGroupPrefix     = "noiommu-"
 )
 
 var (

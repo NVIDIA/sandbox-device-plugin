@@ -141,9 +141,9 @@ func GenerateCDISpec() error {
 func generateCDISpecForClass(class string, scopedIommuKeys []string) error {
 	var deviceSpecs []specs.Device
 
-	iommufdSupported, err := supportsIOMMUFD()
+	iommufdSupported, noIOMMU, err := vfioBackendSupport()
 	if err != nil {
-		return fmt.Errorf("failed to check IOMMUFD support: %w", err)
+		return fmt.Errorf("could not determine vfio backend support: %w", err)
 	}
 
 	// Sort iommu keys to ensure deterministic device ordering in the CDI spec.
@@ -170,12 +170,16 @@ func generateCDISpecForClass(class string, scopedIommuKeys []string) error {
 					Path: filepath.Join(vfioDevicePath, "devices", dev.IommuFD),
 				})
 			} else {
+				groupName := iommuKey
+				if noIOMMU {
+					groupName = noiommuGroupPrefix + iommuKey
+				}
 				deviceNodes = append(deviceNodes,
 					&specs.DeviceNode{
 						Path: filepath.Join(vfioDevicePath, "vfio"),
 					},
 					&specs.DeviceNode{
-						Path: filepath.Join(vfioDevicePath, iommuKey),
+						Path: filepath.Join(vfioDevicePath, groupName),
 					},
 				)
 			}
