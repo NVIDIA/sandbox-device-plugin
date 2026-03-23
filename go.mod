@@ -1,12 +1,12 @@
 module github.com/nvidia/sandbox-device-plugin
 
-go 1.25.6
+go 1.26
 
 require (
 	github.com/NVIDIA/go-nvlib v0.9.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/golangci/golangci-lint v1.64.8
-	github.com/matryer/moq v0.6.0
+	github.com/matryer/moq v0.7.1
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	google.golang.org/grpc v1.79.1
