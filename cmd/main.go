@@ -46,7 +46,7 @@ func main() {
 		device_plugin.NVSwitchAlias = "nvswitch"
 	}
 	enableGFDFlag, ok = os.LookupEnv("ENABLE_GFD")
-	// default is true
+	// default is false
 	if ok {
 		device_plugin.EnableGFD, _ = strconv.ParseBool(enableGFDFlag)
 	}

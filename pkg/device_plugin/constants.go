@@ -47,7 +47,7 @@ var (
 	// cdiRoot can be set for testing to redirect CDI spec output
 	cdiRoot = "/var/run/cdi"
 	// Flag to allow running GFD pod
-	EnableGFD = true
+	EnableGFD = false
 )
 
 func setCdiRoot(path string) {
