@@ -28,7 +28,7 @@ jobs:
       matrix:
         arch:
           - amd64
-#          - arm64
+          - arm64
     runs-on: linux-${{ matrix.arch }}-cpu4
     permissions:
       contents: read
@@ -117,4 +117,5 @@ jobs:
         run: |
           docker buildx imagetools create \
             --tag ${MULTIARCH_IMAGE} \
-            ghcr.io/${{ env.LOWERCASE_REPO_OWNER }}/nvidia-sandbox-device-plugin:${{ env.COMMIT_SHORT_SHA }}-amd64
+            ghcr.io/${{ env.LOWERCASE_REPO_OWNER }}/nvidia-sandbox-device-plugin:${{ env.COMMIT_SHORT_SHA }}-amd64 \
+            ghcr.io/${{ env.LOWERCASE_REPO_OWNER }}/nvidia-sandbox-device-plugin:${{ env.COMMIT_SHORT_SHA }}-arm64
