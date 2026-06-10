@@ -8,7 +8,7 @@ require (
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/matryer/moq v0.7.1
 	github.com/onsi/ginkgo/v2 v2.29.0
-	github.com/onsi/gomega v1.40.0
+	github.com/onsi/gomega v1.41.0
 	google.golang.org/grpc v1.81.1
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
