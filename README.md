@@ -131,7 +131,32 @@ Push docker image to a docker repo
 ```shell
 make push-image DOCKER_REPO=<docker-repo-url> DOCKER_TAG=<image-tag>
 ```
+### Fabric Manager partition-aware allocation (Shared NVSwitch)
+
+On NVSwitch systems running Fabric Manager in the Shared NVSwitch model, NVLink between a VM's
+GPUs only works when those GPUs form an activated FM fabric partition. `GetPreferredAllocation`
+uses the FM SDK (`fmGetSupportedFabricPartitions`) to prefer device sets that match a supported
+partition of the requested size, so multi-GPU pods get working NVLink.
+
+It is opt-in and off by default. To enable:
+
+- Build with libnvfm support: `CGO_ENABLED=1 go build -tags=nvfm ./...` (needs the
+  `nvidia-fabric-manager-devel` package; the default build ships a stub and needs no SDK). A
+  binary built without the tag refuses to enable FM even if the env var is set.
+- Set `ENABLE_FABRIC_MANAGER=true`. Optional: `FM_ADDRESS` (default `127.0.0.1:6666`),
+  `FM_ADDRESS_TYPE` (`inet`|`unix`), `GPU_PCI_MODULE_MAPPING_PATH` (default
+  `/run/nvidia-fabricmanager/gpu-pci-module-mapping.json`).
+- The deployment must let the plugin reach FM's command API and read the mapping file — i.e.
+  the FM endpoint has to be reachable from the pod (host loopback needs `hostNetwork`) and the
+  mapping path host-mounted. The mapping is a JSON object of PCI BDF to GPU module id; it is
+  required because BDF order is not module-id order.
+
+If FM is unreachable or nothing matches, the plugin returns no preference and the devicemanager
+allocates as usual, so this can never fail an allocation. Automatic partition activation and
+generation of the mapping file are out of scope.
+
 ### To Do
 - Improve the healthcheck mechanism for GPUs with VFIO-PCI drivers
-- Support GetPreferredAllocation API of DevicePluginServer. It returns a preferred set of devices to allocate from a list of available ones. The resulting preferred allocation is not guaranteed to be the allocation ultimately performed by the devicemanager. It is only designed to help the devicemanager make a more informed allocation decision when possible. It has not been implemented in sandbox-device-plugin.
+- Build the container image with `-tags=nvfm` on all target arches (the FM SDK install is
+  currently x86_64 only) and add a libnvfm cgo build/test path to CI
 --------------------------------------------------------------

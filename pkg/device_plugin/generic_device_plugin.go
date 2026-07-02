@@ -44,6 +44,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+
+	"github.com/nvidia/sandbox-device-plugin/pkg/fabric_manager"
 )
 
 var returnIommuMap = getIommuMap
@@ -60,6 +62,9 @@ type GenericDevicePlugin struct {
 	devicePath string
 	deviceName string
 	devsHealth []*pluginapi.Device
+	// partitionManager, when non-nil, enables fabric manager partition-aware
+	// preferred allocation for this plugin's devices.
+	partitionManager *fabric_manager.PartitionManager
 }
 
 // Returns an initialized instance of GenericDevicePlugin
@@ -76,6 +81,12 @@ func NewGenericDevicePlugin(deviceName string, devicePath string, devices []*plu
 		devicePath: devicePath,
 	}
 	return dpi
+}
+
+// SetPartitionManager enables fabric manager partition-aware preferred
+// allocation for this device plugin.
+func (dpi *GenericDevicePlugin) SetPartitionManager(pm *fabric_manager.PartitionManager) {
+	dpi.partitionManager = pm
 }
 
 func waitForGrpcServer(socketPath string, timeout time.Duration) error {
@@ -300,6 +311,9 @@ func (dpi *GenericDevicePlugin) cleanup() error {
 func (dpi *GenericDevicePlugin) GetDevicePluginOptions(ctx context.Context, e *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	options := &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
+		// Only advertise GetPreferredAllocation when fabric manager
+		// partition-aware allocation is enabled for this plugin.
+		GetPreferredAllocationAvailable: dpi.partitionManager != nil,
 	}
 	return options, nil
 }
@@ -309,15 +323,41 @@ func (dpi *GenericDevicePlugin) PreStartContainer(ctx context.Context, in *plugi
 	return res, nil
 }
 
-// GetPreferredAllocation is for compatible with new DevicePluginServer API for DevicePlugin service. It has not been implemented in kubevrit-gpu-device-plugin
+// GetPreferredAllocation returns a preferred set of devices to allocate from
+// a list of available ones. When fabric manager partition-aware allocation is
+// enabled, it prefers device sets that exactly match an FM fabric partition
+// of the requested size so that NVLink works between the allocated GPUs. The
+// resulting preferred allocation is not guaranteed to be the allocation
+// ultimately performed by the devicemanager; on any failure or when no
+// partition fits, an empty preference is returned so the kubelet falls back
+// to its default allocation instead of failing.
 func (dpi *GenericDevicePlugin) GetPreferredAllocation(ctx context.Context, in *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
-	// TODO
-	// returns a preferred set of devices to allocate
-	// from a list of available ones. The resulting preferred allocation is not
-	// guaranteed to be the allocation ultimately performed by the
-	// devicemanager. It is only designed to help the devicemanager make a more
-	// informed allocation decision when possible.
-	return nil, nil
+	log.Printf("[%s] GetPreferredAllocation called with %d container request(s)", dpi.deviceName, len(in.ContainerRequests))
+
+	response := &pluginapi.PreferredAllocationResponse{}
+	for idx, req := range in.ContainerRequests {
+		var preferred []string
+		if dpi.partitionManager != nil {
+			log.Printf("[%s] container request %d: available=%v mustInclude=%v size=%d",
+				dpi.deviceName, idx, req.AvailableDeviceIDs, req.MustIncludeDeviceIDs, req.AllocationSize)
+
+			var err error
+			preferred, err = dpi.partitionManager.SelectPreferred(ctx, req.AvailableDeviceIDs, req.MustIncludeDeviceIDs, int(req.AllocationSize))
+			if err != nil {
+				// Never fail the allocation on fabric manager errors; log and
+				// let the kubelet use its default allocation.
+				log.Printf("[%s] fabric partition preferred allocation failed for container request %d: %v",
+					dpi.deviceName, idx, err)
+				preferred = nil
+			}
+			log.Printf("[%s] preferred devices for container request %d: %v", dpi.deviceName, idx, preferred)
+		}
+		response.ContainerResponses = append(response.ContainerResponses,
+			&pluginapi.ContainerPreferredAllocationResponse{
+				DeviceIDs: preferred,
+			})
+	}
+	return response, nil
 }
 
 // Health check of GPU devices

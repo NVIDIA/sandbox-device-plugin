@@ -37,6 +37,8 @@ import (
 
 	"github.com/NVIDIA/go-nvlib/pkg/nvpci"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+
+	"github.com/nvidia/sandbox-device-plugin/pkg/fabric_manager"
 )
 
 // NvidiaPCIDevice holds details about an NVIDIA PCI device (GPU or NVSwitch)
@@ -65,6 +67,19 @@ var startDevicePlugin = startDevicePluginFunc
 var stop = make(chan struct{})
 var PGPUAlias string
 var NVSwitchAlias string
+
+// FMPartitionConfig carries the fabric manager wiring created in cmd/main.go
+// when ENABLE_FABRIC_MANAGER=true.
+type FMPartitionConfig struct {
+	// Client talks to the fabric manager partition API.
+	Client fabric_manager.FMClient
+	// PCIToModule maps GPU PCI BDF addresses to physical module IDs.
+	PCIToModule map[string]uint32
+}
+
+// FMPartition, when non-nil, enables fabric manager partition-aware preferred
+// allocation for GPU (non-NVSwitch) device plugins.
+var FMPartition *FMPartitionConfig
 
 func InitiateDevicePlugin() {
 	// Initialize nvpci library if not already set (allows injection for testing)
@@ -124,6 +139,17 @@ func createDevicePlugins() {
 			devicePath = "/dev/vfio/devices/"
 		}
 		dp := NewGenericDevicePlugin(deviceName, devicePath, devs)
+
+		// Enable fabric manager partition-aware preferred allocation for GPU
+		// plugins only; NVSwitch plugins are left without a partition manager.
+		if FMPartition != nil && !isNVSwitchDeviceID(deviceID) {
+			deviceIDToPCI := buildDeviceIDToPCIMap(iommuKeys)
+			dp.SetPartitionManager(fabric_manager.NewPartitionManager(
+				FMPartition.Client, FMPartition.PCIToModule, deviceIDToPCI))
+			log.Printf("Fabric manager partition-aware allocation enabled for %q (%d device(s))",
+				deviceName, len(deviceIDToPCI))
+		}
+
 		err := startDevicePlugin(dp)
 		if err != nil {
 			log.Printf("Error starting %s device plugin: %v", dp.deviceName, err)
@@ -219,6 +245,25 @@ func createIommuDeviceMap() {
 			IsNVSwitch: isSwitch,
 		})
 	}
+}
+
+// buildDeviceIDToPCIMap maps plugin device IDs (IOMMU group/fd keys) to the
+// PCI BDF address of the device they represent, for fabric manager partition
+// lookups.
+func buildDeviceIDToPCIMap(iommuKeys []string) map[string]string {
+	deviceIDToPCI := make(map[string]string, len(iommuKeys))
+	for _, iommuKey := range iommuKeys {
+		devs := iommuMap[iommuKey]
+		if len(devs) == 0 {
+			continue
+		}
+		if len(devs) > 1 {
+			log.Printf("IOMMU key %s has %d devices; using %s for fabric partition mapping",
+				iommuKey, len(devs), devs[0].Address)
+		}
+		deviceIDToPCI[iommuKey] = devs[0].Address
+	}
+	return deviceIDToPCI
 }
 
 // getDeviceType returns a human-readable device type string

@@ -29,10 +29,46 @@
 package main
 
 import (
-	"github.com/nvidia/sandbox-device-plugin/pkg/device_plugin"
+	"log"
 	"os"
 	"strconv"
+
+	"github.com/nvidia/sandbox-device-plugin/pkg/device_plugin"
+	"github.com/nvidia/sandbox-device-plugin/pkg/fabric_manager"
 )
+
+// isFabricManagerEnabled returns true if fabric manager integration is
+// enabled via the ENABLE_FABRIC_MANAGER environment variable.
+func isFabricManagerEnabled() bool {
+	enabled, _ := strconv.ParseBool(os.Getenv("ENABLE_FABRIC_MANAGER"))
+	return enabled
+}
+
+// setupFabricManager loads the GPU PCI-to-module mapping and constructs the
+// fabric manager client used for partition-aware preferred allocation. On any
+// failure it logs and returns without enabling fabric manager support, so the
+// device plugin still serves devices normally.
+func setupFabricManager() {
+	if !fabric_manager.Built {
+		log.Printf("ENABLE_FABRIC_MANAGER is set but this binary was built without libnvfm support; partition-aware allocation stays off (rebuild on linux with CGO_ENABLED=1 and -tags=nvfm)")
+		return
+	}
+
+	mappingPath := fabric_manager.PCIModuleMappingPathFromEnv()
+	pciToModule, err := fabric_manager.LoadPCIModuleMapping(mappingPath)
+	if err != nil {
+		log.Printf("Fabric manager enabled but loading PCI module mapping %q failed: %v; continuing without partition-aware allocation",
+			mappingPath, err)
+		return
+	}
+
+	device_plugin.FMPartition = &device_plugin.FMPartitionConfig{
+		Client:      fabric_manager.NewFMClient(fabric_manager.ConfigFromEnv()),
+		PCIToModule: pciToModule,
+	}
+	log.Printf("Fabric manager partition-aware allocation enabled (mapping: %s, %d GPU(s))",
+		mappingPath, len(pciToModule))
+}
 
 func main() {
 	var ok bool
@@ -49,6 +85,10 @@ func main() {
 	// default is false
 	if ok {
 		device_plugin.EnableGFD, _ = strconv.ParseBool(enableGFDFlag)
+	}
+	// default is false
+	if isFabricManagerEnabled() {
+		setupFabricManager()
 	}
 	device_plugin.InitiateDevicePlugin()
 }

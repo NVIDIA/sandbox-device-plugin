@@ -30,6 +30,7 @@ package device_plugin
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -39,6 +40,8 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+
+	"github.com/nvidia/sandbox-device-plugin/pkg/fabric_manager"
 )
 
 var devices []*pluginapi.Device
@@ -235,5 +238,87 @@ var _ = Describe("Generic Device", func() {
 		Expect(devices[1].ID).To(Equal(iommuGroup2))
 		Expect(devices[0].Health).To(Equal(pluginapi.Healthy))
 		Expect(devices[1].Health).To(Equal(pluginapi.Healthy))
+	})
+})
+
+// fakeFMClient is a fake fabric_manager.FMClient returning fixed partitions.
+type fakeFMClient struct {
+	partitions []fabric_manager.Partition
+	err        error
+}
+
+func (f *fakeFMClient) GetSupportedPartitions(ctx context.Context) ([]fabric_manager.Partition, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.partitions, nil
+}
+
+var _ = Describe("GetPreferredAllocation() Fabric Manager Tests", func() {
+	// Devices "1" and "2" (PCI addresses pciAddress1/pciAddress2) map to
+	// physical module IDs 1 and 2, which form fabric partition 1.
+	newFMPartitionManager := func(client fabric_manager.FMClient) *fabric_manager.PartitionManager {
+		return fabric_manager.NewPartitionManager(client,
+			map[string]uint32{pciAddress1: 1, pciAddress2: 2},
+			map[string]string{iommuGroup1: pciAddress1, iommuGroup2: pciAddress2},
+		)
+	}
+
+	newRequest := func() *pluginapi.PreferredAllocationRequest {
+		return &pluginapi.PreferredAllocationRequest{
+			ContainerRequests: []*pluginapi.ContainerPreferredAllocationRequest{
+				{
+					AvailableDeviceIDs: []string{iommuGroup1, iommuGroup2},
+					AllocationSize:     2,
+				},
+			},
+		}
+	}
+
+	It("does not advertise GetPreferredAllocation without a partition manager", func() {
+		dpi := NewGenericDevicePlugin("pgpu", "/tmp/pgpu", []*pluginapi.Device{})
+		options, err := dpi.GetDevicePluginOptions(context.Background(), &pluginapi.Empty{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(options.GetPreferredAllocationAvailable).To(BeFalse())
+	})
+
+	It("advertises GetPreferredAllocation with a partition manager", func() {
+		dpi := NewGenericDevicePlugin("pgpu", "/tmp/pgpu", []*pluginapi.Device{})
+		dpi.SetPartitionManager(newFMPartitionManager(&fakeFMClient{}))
+		options, err := dpi.GetDevicePluginOptions(context.Background(), &pluginapi.Empty{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(options.GetPreferredAllocationAvailable).To(BeTrue())
+	})
+
+	It("returns an empty preference when no partition manager is set", func() {
+		dpi := NewGenericDevicePlugin("pgpu", "/tmp/pgpu", []*pluginapi.Device{})
+		resp, err := dpi.GetPreferredAllocation(context.Background(), newRequest())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.ContainerResponses).To(HaveLen(1))
+		Expect(resp.ContainerResponses[0].DeviceIDs).To(BeEmpty())
+	})
+
+	It("prefers the devices of a matching fabric partition", func() {
+		dpi := NewGenericDevicePlugin("pgpu", "/tmp/pgpu", []*pluginapi.Device{})
+		dpi.SetPartitionManager(newFMPartitionManager(&fakeFMClient{
+			partitions: []fabric_manager.Partition{
+				{ID: 1, GPUPhysicalIDs: []uint32{1, 2}},
+			},
+		}))
+		resp, err := dpi.GetPreferredAllocation(context.Background(), newRequest())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.ContainerResponses).To(HaveLen(1))
+		Expect(resp.ContainerResponses[0].DeviceIDs).To(Equal([]string{iommuGroup1, iommuGroup2}))
+	})
+
+	It("returns an empty preference instead of failing on fabric manager errors", func() {
+		dpi := NewGenericDevicePlugin("pgpu", "/tmp/pgpu", []*pluginapi.Device{})
+		dpi.SetPartitionManager(newFMPartitionManager(&fakeFMClient{
+			err: errors.New("connection refused"),
+		}))
+		resp, err := dpi.GetPreferredAllocation(context.Background(), newRequest())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.ContainerResponses).To(HaveLen(1))
+		Expect(resp.ContainerResponses[0].DeviceIDs).To(BeEmpty())
 	})
 })
