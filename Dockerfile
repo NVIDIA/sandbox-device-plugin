@@ -24,7 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.19.0
+ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.19.3
 ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.2.0-base-ubi9
 ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.0.8-dev
 
@@ -49,9 +49,6 @@ RUN set -eux; \
 
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
-
-ENV GOOS=linux\
-    GOARCH=amd64
 
 WORKDIR /go/src/sandbox-device-plugin
 
