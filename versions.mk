@@ -13,8 +13,8 @@
 # limitations under the License.
 
 VERSION ?= v0.9.0
-DISTROLESS_BASE_IMAGE ?= nvcr.io/nvidia/distroless/go:v4.0.8-dev
-BUILDER_IMAGE ?= nvcr.io/nvidia/cuda:13.2.0-base-ubi9
+DISTROLESS_BASE_IMAGE ?= nvcr.io/nvidia/distroless/go:v4.0.9
+BUILDER_IMAGE ?= nvcr.io/nvidia/cuda:13.3.1-base-ubi9
 GFD_IMAGE ?= nvcr.io/nvidia/k8s-device-plugin:v0.19.3
 
 MODULE := github.com/NVIDIA/sandbox-device-plugin

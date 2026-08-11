@@ -25,8 +25,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.19.3
-ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.2.0-base-ubi9
-ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.0.8-dev
+ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.3.1-base-ubi9
+ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.0.9
 
 FROM ${GFD_IMAGE} as gfd
 
@@ -34,7 +34,7 @@ FROM ${BUILDER_IMAGE} as builder
 
 RUN yum install -y wget make gcc
 
-ARG GOLANG_VERSION=1.26.2
+ARG GOLANG_VERSION=1.26.5
 RUN set -eux; \
     \
     arch="$(uname -m)"; \
@@ -56,11 +56,24 @@ COPY . .
 
 RUN make build
 
+# Build a static busybox layout: one binary plus applet symlinks (sh, rm,
+# ln, sleep, cat, ...) so PATH-resolved commands in init-container wrappers
+# and lifecycle hooks keep working on the non-*-dev* distroless base.
+FROM debian:trixie-slim AS shell
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends busybox-static \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir /busybox \
+ && cp /bin/busybox /busybox/busybox \
+ && /busybox/busybox --install -s /busybox
+
 FROM ${DISTROLESS_BASE_IMAGE}
 
 USER 0:0
-SHELL ["/busybox/sh", "-c"]
-RUN ln -s /busybox/sh /bin/sh
+
+COPY --from=shell /busybox /busybox
+RUN ["/busybox/ln", "-s", "/busybox/sh", "/bin/sh"]
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/busybox
 
 ARG VERSION
 
