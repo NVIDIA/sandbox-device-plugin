@@ -2,3 +2,5 @@ _out
 vendor/**/*_test.go
 coverage.out
 nvidia-sandbox-device-plugin
+/bin/
+/.licenses-cache/
