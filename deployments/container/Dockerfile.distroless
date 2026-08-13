@@ -79,6 +79,8 @@ RUN ["/busybox/ln", "-s", "/busybox/sh", "/bin/sh"]
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/busybox
 
 ARG VERSION
+ARG GIT_COMMIT
+ARG BUILD_TIMESTAMP
 
 LABEL io.k8s.display-name="NVIDIA Sandbox Device Plugin"
 LABEL name="NVIDIA Sandbox Device Plugin"
@@ -86,7 +88,17 @@ LABEL vendor="NVIDIA"
 LABEL version="${VERSION}"
 LABEL release="N/A"
 LABEL summary="NVIDIA Sandbox Device Plugin"
-LABEL description="See summary"
+LABEL description="NVIDIA Sandbox Device Plugin"
+LABEL org.opencontainers.image.base.name="nvcr.io/nvidia/distroless/go"
+LABEL org.opencontainers.image.created="${BUILD_TIMESTAMP}"
+LABEL org.opencontainers.image.description="NVIDIA Sandbox Device Plugin"
+LABEL org.opencontainers.image.documentation="https://docs.nvidia.com/datacenter/cloud-native/gpu-operator"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/NVIDIA/sandbox-device-plugin.git"
+LABEL org.opencontainers.image.title="NVIDIA Sandbox Device Plugin"
+LABEL org.opencontainers.image.url="https://catalog.ngc.nvidia.com/orgs/nvidia/cloud-native/containers/nvidia-sandbox-device-plugin"
+LABEL org.opencontainers.image.vendor="NVIDIA"
+LABEL org.opencontainers.image.version="${VERSION}"
 
 COPY --from=builder /go/src/sandbox-device-plugin/nvidia-sandbox-device-plugin /usr/bin/
 COPY --from=builder /go/src/sandbox-device-plugin/utils/pci.ids /usr/pci.ids

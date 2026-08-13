@@ -19,7 +19,6 @@ GFD_IMAGE ?= nvcr.io/nvidia/k8s-device-plugin:v0.19.3
 
 MODULE := github.com/NVIDIA/sandbox-device-plugin
 
-vVERSION := v$(VERSION:v%=%)
 GOLANG_VERSION := $(shell ./scripts/golang-version.sh)
 
 GIT_COMMIT ?= $(shell git describe --match="" --dirty --long --always --abbrev=40 2> /dev/null || echo "")
