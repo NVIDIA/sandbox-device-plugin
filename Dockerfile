@@ -26,7 +26,7 @@
 
 ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.19.3
 ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.3.1-base-ubi9
-ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.0.9
+ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.1.1
 
 FROM ${GFD_IMAGE} as gfd
 
@@ -34,7 +34,7 @@ FROM ${BUILDER_IMAGE} as builder
 
 RUN yum install -y wget make gcc
 
-ARG GOLANG_VERSION=1.26.5
+ARG GOLANG_VERSION=1.26.6
 RUN set -eux; \
     \
     arch="$(uname -m)"; \
