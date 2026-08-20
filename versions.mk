@@ -13,7 +13,7 @@
 # limitations under the License.
 
 VERSION ?= v0.9.0
-DISTROLESS_BASE_IMAGE ?= nvcr.io/nvidia/distroless/go:v4.0.9
+DISTROLESS_BASE_IMAGE ?= nvcr.io/nvidia/distroless/go:v4.1.1
 BUILDER_IMAGE ?= nvcr.io/nvidia/cuda:13.3.1-base-ubi9
 GFD_IMAGE ?= nvcr.io/nvidia/k8s-device-plugin:v0.19.3
 
