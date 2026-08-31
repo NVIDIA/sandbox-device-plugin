@@ -9,7 +9,7 @@ require (
 	github.com/matryer/moq v0.7.1
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.41.0
-	google.golang.org/grpc v1.83.0
+	google.golang.org/grpc v1.83.2
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2
