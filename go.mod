@@ -15,7 +15,7 @@ require (
 	k8s.io/client-go v0.32.2
 	k8s.io/kubelet v0.32.2
 	tags.cncf.io/container-device-interface v1.1.0
-	tags.cncf.io/container-device-interface/specs-go v1.1.0
+	tags.cncf.io/container-device-interface/specs-go v1.1.1
 )
 
 require (
