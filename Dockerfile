@@ -26,7 +26,7 @@
 
 ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.20.0
 ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.3.1-base-ubi9
-ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.1.1
+ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.1.4
 
 FROM ${GFD_IMAGE} as gfd
 
