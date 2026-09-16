@@ -135,3 +135,8 @@ make push-image DOCKER_REPO=<docker-repo-url> DOCKER_TAG=<image-tag>
 - Improve the healthcheck mechanism for GPUs with VFIO-PCI drivers
 - Support GetPreferredAllocation API of DevicePluginServer. It returns a preferred set of devices to allocate from a list of available ones. The resulting preferred allocation is not guaranteed to be the allocation ultimately performed by the devicemanager. It is only designed to help the devicemanager make a more informed allocation decision when possible. It has not been implemented in sandbox-device-plugin.
 --------------------------------------------------------------
+
+## Contributions
+[Read the document on contributions](CONTRIBUTING.md). 
+You can contribute by opening a [pull request](https://help.github.com/en/articles/about-pull-requests).
+Contributions must adhere to the [Code of Conduct](CODE_OF_CONDUCT.md).
