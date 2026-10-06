@@ -6,7 +6,7 @@ require (
 	github.com/NVIDIA/go-nvlib v0.12.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golangci/golangci-lint v1.64.8
-	github.com/matryer/moq v0.7.1
+	github.com/matryer/moq v0.8.0
 	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.43.0
 	google.golang.org/grpc v1.83.2
