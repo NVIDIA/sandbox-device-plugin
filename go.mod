@@ -1,9 +1,9 @@
 module github.com/nvidia/sandbox-device-plugin
 
-go 1.26
+go 1.26.0
 
 require (
-	github.com/NVIDIA/go-nvlib v0.12.0
+	github.com/NVIDIA/go-nvlib v0.13.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/matryer/moq v0.7.1
@@ -214,7 +214,7 @@ require (
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
