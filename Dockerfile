@@ -24,9 +24,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.20.0
-ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.3.1-base-ubi9
-ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.1.4
+ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.20.1
+ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.5.0-base-ubi9
+ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.2.1
 
 FROM ${GFD_IMAGE} as gfd
 
@@ -34,7 +34,7 @@ FROM ${BUILDER_IMAGE} as builder
 
 RUN yum install -y wget make gcc
 
-ARG GOLANG_VERSION=1.26.6
+ARG GOLANG_VERSION=1.27.4
 RUN set -eux; \
     \
     arch="$(uname -m)"; \

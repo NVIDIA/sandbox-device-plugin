@@ -1,6 +1,6 @@
 module github.com/nvidia/sandbox-device-plugin
 
-go 1.26.0
+go 1.27.4
 
 require (
 	github.com/NVIDIA/go-nvlib v0.13.0
