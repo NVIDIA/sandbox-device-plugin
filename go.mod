@@ -7,7 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/matryer/moq v0.8.1
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	google.golang.org/grpc v1.85.0
 	k8s.io/api v0.32.2
