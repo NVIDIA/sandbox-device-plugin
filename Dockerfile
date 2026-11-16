@@ -24,7 +24,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.20.1
+ARG GFD_IMAGE=nvcr.io/nvidia/k8s-device-plugin:v0.20.2
 ARG BUILDER_IMAGE=nvcr.io/nvidia/cuda:13.5.0-base-ubi9
 ARG DISTROLESS_BASE_IMAGE=nvcr.io/nvidia/distroless/go:v4.2.1
 
