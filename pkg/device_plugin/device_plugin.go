@@ -31,11 +31,14 @@ package device_plugin
 import (
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NVIDIA/go-nvlib/pkg/nvpci"
+	"github.com/fsnotify/fsnotify"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
@@ -124,12 +127,12 @@ func createDevicePlugins() {
 			devicePath = "/dev/vfio/devices/"
 		}
 		dp := NewGenericDevicePlugin(deviceName, devicePath, devs)
-		err := startDevicePlugin(dp)
-		if err != nil {
-			log.Printf("Error starting %s device plugin: %v", dp.deviceName, err)
-		} else {
-			devicePlugins = append(devicePlugins, dp)
+		if err := startDevicePlugin(dp); err != nil {
+			log.Printf("Error starting %s device plugin: %v (will retry)", dp.deviceName, err)
 		}
+		// Track the plugin even if it failed to start, so that runPluginManager
+		// retries it rather than leaving the resource permanently unadvertised.
+		devicePlugins = append(devicePlugins, dp)
 	}
 
 	// run GFD job
@@ -137,12 +140,141 @@ func createDevicePlugins() {
 		go runGFD()
 	}
 
-	<-stop
+	runPluginManager(devicePlugins)
+}
 
-	log.Printf("Shutting down device plugin controller")
-	for _, v := range devicePlugins {
-		v.Stop()
+// runPluginManager blocks until shutdown, keeping every device plugin
+// registered with kubelet.
+//
+// Kubelet wipes /var/lib/kubelet/device-plugins when it initializes, deleting
+// every plugin socket in it. If this process starts before kubelet finishes
+// initializing -- which happens on a cold boot -- it registers successfully
+// against the outgoing kubelet.sock and is then silently unregistered when
+// kubelet wipes the directory. The process stays alive serving gRPC on an
+// unlinked inode and the node advertises zero devices until someone deletes
+// the pod by hand.
+//
+// Two signals bring the plugins back:
+//
+//   - a CREATE event for kubelet.sock in the device-plugin directory, which is
+//     the standard device-plugin API contract for "kubelet restarted"; and
+//   - a periodic check that each plugin's own socket is still on disk, which
+//     covers a socket removed without kubelet.sock being recreated, a missed
+//     or undeliverable fsnotify event, and retrying a failed re-registration.
+//
+// Nothing here requires a particular resource to exist: plugins are whatever
+// was discovered on this node, so a node with no NVSwitch simply has no
+// nvswitch plugin to watch.
+func runPluginManager(plugins []*GenericDevicePlugin) {
+	var events chan fsnotify.Event
+	var watchErrors chan error
+
+	watcher, err := newDirWatcher(devicePluginPath)
+	if err != nil {
+		log.Printf("Unable to watch %s (%v); falling back to the %s socket check to detect kubelet restarts",
+			devicePluginPath, err, socketCheckInterval)
+	} else {
+		defer watcher.Close()
+		events, watchErrors = watcher.Events, watcher.Errors
+		log.Printf("Watching %s for kubelet restarts", devicePluginPath)
 	}
+
+	ticker := time.NewTicker(socketCheckInterval)
+	defer ticker.Stop()
+
+	// Identity of the kubelet.sock the plugins are registered against. A
+	// kubelet restart replaces that inode; re-registering ourselves does not.
+	// Comparing inodes keeps a duplicate or spurious CREATE event -- our own
+	// socket churn can produce one, depending on the fsnotify backend -- from
+	// putting the plugins into a re-registration loop.
+	currentKubeletSocket, _ := os.Stat(kubeletSocket)
+
+	reregister := func(targets []*GenericDevicePlugin) {
+		restartPlugins(targets)
+		if fi, err := os.Stat(kubeletSocket); err == nil {
+			currentKubeletSocket = fi
+		}
+	}
+
+	for {
+		select {
+		case <-stop:
+			log.Printf("Shutting down device plugin controller")
+			for _, dp := range plugins {
+				dp.Stop()
+			}
+			return
+
+		case event, ok := <-events:
+			if !ok {
+				events = nil
+				continue
+			}
+			if event.Name != kubeletSocket || !event.Has(fsnotify.Create) {
+				continue
+			}
+			fi, err := os.Stat(kubeletSocket)
+			if err != nil {
+				log.Printf("Got a create event for %s but could not stat it: %v", kubeletSocket, err)
+				continue
+			}
+			if currentKubeletSocket != nil && os.SameFile(currentKubeletSocket, fi) {
+				// Same socket we are already registered against.
+				continue
+			}
+			currentKubeletSocket = fi
+			log.Printf("%s was recreated, kubelet restarted; re-registering all device plugins",
+				kubeletSocket)
+			reregister(plugins)
+
+		case err, ok := <-watchErrors:
+			if !ok {
+				watchErrors = nil
+				continue
+			}
+			log.Printf("fsnotify error while watching %s: %v", devicePluginPath, err)
+
+		case <-ticker.C:
+			var lost []*GenericDevicePlugin
+			for _, dp := range plugins {
+				if !dp.registered() {
+					log.Printf("Device plugin %q is not registered with kubelet, re-registering it",
+						dp.deviceName)
+					lost = append(lost, dp)
+				}
+			}
+			if len(lost) > 0 {
+				reregister(lost)
+			}
+		}
+	}
+}
+
+// restartPlugins re-registers each plugin. Failures are logged and left for
+// the next socket check to retry; one plugin failing must not stop the others.
+func restartPlugins(plugins []*GenericDevicePlugin) {
+	for _, dp := range plugins {
+		if err := dp.restart(); err != nil {
+			log.Printf("Failed to re-register %s device plugin: %v (will retry in %s)",
+				dp.deviceName, err, socketCheckInterval)
+			continue
+		}
+		log.Printf("Re-registered device plugin %q with %d device(s)", dp.deviceName, len(dp.devs))
+	}
+}
+
+// newDirWatcher returns an fsnotify watcher already watching dir, or an error
+// with the watcher cleaned up.
+func newDirWatcher(dir string) (*fsnotify.Watcher, error) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, err
+	}
+	if err := watcher.Add(dir); err != nil {
+		watcher.Close()
+		return nil, err
+	}
+	return watcher, nil
 }
 
 func startDevicePluginFunc(dp *GenericDevicePlugin) error {

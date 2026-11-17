@@ -38,6 +38,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -51,25 +52,34 @@ var returnIommuMap = getIommuMap
 // Implements the kubernetes device plugin API
 type GenericDevicePlugin struct {
 	devs       []*pluginapi.Device
-	server     *grpc.Server
 	socketPath string
-	stop       chan struct{} // this channel signals to stop the DP
-	term       chan bool     // this channel detects kubelet restarts
+	stop       chan struct{} // this channel signals a process-wide shutdown
 	healthy    chan string
 	unhealthy  chan string
 	devicePath string
 	deviceName string
 	devsHealth []*pluginapi.Device
+
+	// mu guards server and done, which are replaced every time the plugin
+	// re-registers with a restarted kubelet.
+	mu     sync.Mutex
+	server *grpc.Server
+	// registeredWithKubelet records whether the last Register call for the
+	// current server generation succeeded.
+	registeredWithKubelet bool
+	// done is closed when the current gRPC server generation is torn down.
+	// ListAndWatch and healthCheck use it so that goroutines belonging to a
+	// previous generation cannot outlive it.
+	done chan struct{}
 }
 
 // Returns an initialized instance of GenericDevicePlugin
 func NewGenericDevicePlugin(deviceName string, devicePath string, devices []*pluginapi.Device) *GenericDevicePlugin {
 	log.Println("Devicename " + deviceName)
-	serverSock := fmt.Sprintf(pluginapi.DevicePluginPath+"sandbox-%s.sock", deviceName)
+	serverSock := filepath.Join(devicePluginPath, fmt.Sprintf("sandbox-%s.sock", deviceName))
 	dpi := &GenericDevicePlugin{
 		devs:       devices,
 		socketPath: serverSock,
-		term:       make(chan bool, 1),
 		healthy:    make(chan string),
 		unhealthy:  make(chan string),
 		deviceName: deviceName,
@@ -108,13 +118,23 @@ func connect(socketPath string, timeout time.Duration) (*grpc.ClientConn, error)
 	return c, nil
 }
 
-// Start starts the gRPC server of the device plugin
+// Start starts the gRPC server of the device plugin and registers it with kubelet.
 func (dpi *GenericDevicePlugin) Start(stop chan struct{}) error {
+	dpi.mu.Lock()
+	defer dpi.mu.Unlock()
+
+	if dpi.stop == nil {
+		dpi.stop = stop
+	}
+
+	return dpi.startUnprotected()
+}
+
+// startUnprotected brings up a new gRPC server generation. dpi.mu must be held.
+func (dpi *GenericDevicePlugin) startUnprotected() error {
 	if dpi.server != nil {
 		return fmt.Errorf("gRPC server already started")
 	}
-
-	dpi.stop = stop
 
 	err := dpi.cleanup()
 	if err != nil {
@@ -127,38 +147,55 @@ func (dpi *GenericDevicePlugin) Start(stop chan struct{}) error {
 		return err
 	}
 
+	dpi.done = make(chan struct{})
+	dpi.registeredWithKubelet = false
 	dpi.server = grpc.NewServer([]grpc.ServerOption{}...)
 	pluginapi.RegisterDevicePluginServer(dpi.server, dpi)
 
 	go dpi.server.Serve(sock)
 
-	err = waitForGrpcServer(dpi.socketPath, connectionTimeout)
-	if err != nil {
-		// this err is returned at the end of the Start function
+	if err := waitForGrpcServer(dpi.socketPath, connectionTimeout); err != nil {
+		// Not fatal on its own: Register below is the authoritative check.
 		log.Printf("[%s] Error connecting to GRPC server: %v", dpi.deviceName, err)
 	}
 
-	err = dpi.Register()
-	if err != nil {
+	if err := dpi.Register(); err != nil {
 		log.Printf("[%s] Error registering with device plugin manager: %v", dpi.deviceName, err)
 		return err
 	}
+	dpi.registeredWithKubelet = true
 
-	go dpi.healthCheck()
+	// Hand the generation's teardown channel and interval over while dpi.mu is
+	// held, rather than having the goroutine look them up once it is running.
+	go dpi.runHealthCheck(dpi.done, healthCheckInterval)
 
 	log.Println(dpi.deviceName + " Device plugin server ready")
 
-	return err
+	return nil
 }
 
-// Stop stops the gRPC server
+// Stop stops the gRPC server. It is safe to call on a plugin that was never
+// started, and safe to call more than once.
 func (dpi *GenericDevicePlugin) Stop() error {
+	dpi.mu.Lock()
+	defer dpi.mu.Unlock()
+
+	return dpi.stopUnprotected()
+}
+
+// stopUnprotected tears down the current gRPC server generation. dpi.mu must be held.
+func (dpi *GenericDevicePlugin) stopUnprotected() error {
+	dpi.registeredWithKubelet = false
+
+	// Signal ListAndWatch and healthCheck for this generation to return.
+	if dpi.done != nil {
+		close(dpi.done)
+		dpi.done = nil
+	}
+
 	if dpi.server == nil {
 		return nil
 	}
-
-	// Send terminate signal to ListAndWatch()
-	dpi.term <- true
 
 	dpi.server.Stop()
 	dpi.server = nil
@@ -166,23 +203,55 @@ func (dpi *GenericDevicePlugin) Stop() error {
 	return dpi.cleanup()
 }
 
-// Restarts DP server
+// restart tears down the plugin's gRPC server and registers it with kubelet
+// again. This is how the plugin recovers when kubelet restarts and wipes
+// /var/lib/kubelet/device-plugins out from under a plugin that had already
+// registered successfully against the previous kubelet.
 func (dpi *GenericDevicePlugin) restart() error {
 	log.Printf("Restarting %s device plugin server", dpi.deviceName)
-	if dpi.server == nil {
-		return fmt.Errorf("grpc server instance not found for %s", dpi.deviceName)
+
+	dpi.mu.Lock()
+	defer dpi.mu.Unlock()
+
+	if err := dpi.stopUnprotected(); err != nil {
+		// Losing the old socket file is expected here: kubelet just deleted it.
+		log.Printf("[%s] Error stopping device plugin server: %v", dpi.deviceName, err)
 	}
 
-	dpi.Stop()
+	return dpi.startUnprotected()
+}
 
-	// Create new instance of a grpc server
-	var stop = make(chan struct{})
-	return dpi.Start(stop)
+// registered reports whether kubelet can currently reach this plugin: it
+// registered successfully and its socket is still present on disk.
+//
+// The socket check is the one that matters for the cold-boot race. When
+// kubelet wipes /var/lib/kubelet/device-plugins the process stays alive and
+// keeps serving gRPC on an unlinked inode, so every in-process signal still
+// looks healthy while kubelet advertises zero devices.
+func (dpi *GenericDevicePlugin) registered() bool {
+	dpi.mu.Lock()
+	ok := dpi.server != nil && dpi.registeredWithKubelet
+	dpi.mu.Unlock()
+
+	if !ok {
+		return false
+	}
+
+	_, err := os.Stat(dpi.socketPath)
+	return err == nil
+}
+
+// doneChan returns the teardown channel for the current server generation.
+func (dpi *GenericDevicePlugin) doneChan() chan struct{} {
+	dpi.mu.Lock()
+	defer dpi.mu.Unlock()
+
+	return dpi.done
 }
 
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (dpi *GenericDevicePlugin) Register() error {
-	conn, err := connect(pluginapi.KubeletSocket, connectionTimeout)
+	conn, err := connect(kubeletSocket, connectionTimeout)
 	if err != nil {
 		return err
 	}
@@ -204,6 +273,9 @@ func (dpi *GenericDevicePlugin) Register() error {
 
 // ListAndWatch lists devices and update that list according to the health status
 func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	// Pin the teardown channel for the generation this stream belongs to, so a
+	// subsequent re-registration cannot leave this stream running.
+	done := dpi.doneChan()
 
 	s.Send(&pluginapi.ListAndWatchResponse{Devices: dpi.devs})
 
@@ -227,7 +299,7 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 			s.Send(&pluginapi.ListAndWatchResponse{Devices: dpi.devs})
 		case <-dpi.stop:
 			return nil
-		case <-dpi.term:
+		case <-done:
 			return nil
 		}
 	}
@@ -320,84 +392,164 @@ func (dpi *GenericDevicePlugin) GetPreferredAllocation(ctx context.Context, in *
 	return nil, nil
 }
 
-// Health check of GPU devices
+// healthCheck monitors the device nodes backing this plugin's devices and
+// reports health transitions to ListAndWatch.
+//
+// Device nodes are checked with os.Stat(), and the check runs whenever the
+// device directory (/dev/vfio or /dev/vfio/devices) changes, plus every
+// interval as a backstop for missed events or a watch that could not be set up.
+//
+// The watch is on the directory, never on the device nodes themselves. The
+// nodes are character devices (crw------- root:root), and inotify_add_watch()
+// needs read permission on the inode, which routes through the device cgroup
+// check. This DaemonSet mounts /dev/vfio as a hostPath but is not granted those
+// devices by the container runtime, so the kernel answers EPERM. The directory
+// is an ordinary directory, and os.Stat() only needs search permission on the
+// parent directories, so neither is subject to that check.
+//
+// A watch on a device node would also be unable to ever report a device
+// healthy again: an inotify watch on a non-directory dies with the inode, so
+// no Create event can be delivered for the path once it is gone.
+//
+// This function never returns an error that matters to anything else. It runs
+// in its own goroutine and its failure must not be able to take down
+// re-registration, which is handled by runPluginManager.
 func (dpi *GenericDevicePlugin) healthCheck() error {
+	return dpi.runHealthCheck(dpi.doneChan(), healthCheckInterval)
+}
+
+// runHealthCheck is healthCheck for the server generation torn down by done.
+func (dpi *GenericDevicePlugin) runHealthCheck(done chan struct{}, interval time.Duration) error {
 	method := fmt.Sprintf("healthCheck(%s)", dpi.deviceName)
-	log.Printf("%s: invoked", method)
-	var pathDeviceMap = make(map[string]string)
-	var path = dpi.devicePath
-	var health = ""
 
 	iommufdSupported, err := supportsIOMMUFD()
 	if err != nil {
-		return fmt.Errorf("could not determine iommufd support: %w", err)
+		log.Printf("%s: could not determine iommufd support, assuming legacy vfio: %v", method, err)
 	}
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Printf("%s: Unable to create fsnotify watcher: %v", method, err)
-		return err
-	}
-	defer watcher.Close()
-
-	err = watcher.Add(filepath.Dir(dpi.socketPath))
-	if err != nil {
-		log.Printf("%s: Unable to add device plugin socket path to fsnotify watcher: %v", method, err)
-		return err
-	}
-
-	_, err = os.Stat(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("%s: Unable to stat device: %v", method, err)
-			return err
-		}
-	}
-
+	// Device ID -> device node that must exist for that device to be healthy.
+	devicePaths := make(map[string]string, len(dpi.devs))
+	lastHealthy := make(map[string]bool, len(dpi.devs))
 	for _, dev := range dpi.devs {
 		devID := dev.ID
 		if iommufdSupported {
 			devID = fmt.Sprintf("vfio%s", dev.ID)
 		}
-		devicePath := filepath.Join(path, devID)
-		err = watcher.Add(devicePath)
-		log.Printf(" Adding Watcher to Path : %v", devicePath)
-		pathDeviceMap[devicePath] = dev.ID
-		if err != nil {
-			log.Printf("%s: Unable to add device path to fsnotify watcher: %v", method, err)
-			return err
-		}
+		devicePaths[dev.ID] = filepath.Join(dpi.devicePath, devID)
+		lastHealthy[dev.ID] = dev.Health == pluginapi.Healthy
 	}
 
+	log.Printf("%s: checking %d device node(s) under %s on change and every %s",
+		method, len(devicePaths), dpi.devicePath, interval)
+
+	watchDir := filepath.Clean(dpi.devicePath)
+	var watcher *fsnotify.Watcher
+	watchFailing := false
+	defer func() {
+		if watcher != nil {
+			watcher.Close()
+		}
+	}()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	for {
-		select {
-		case <-dpi.stop:
-			return nil
-		case event := <-watcher.Events:
-			v, ok := pathDeviceMap[event.Name]
-			if ok {
-				// Health in this case is if the device path actually exists
-				if event.Op == fsnotify.Create {
-					health = v
-					dpi.healthy <- health
-				} else if (event.Op == fsnotify.Remove) || (event.Op == fsnotify.Rename) {
-					log.Printf("%s: Marking device unhealthy: %s", method, event.Name)
-					health = v
-					dpi.unhealthy <- health
+		// (Re-)establish the directory watch before checking, so that a change
+		// between the check and the watch being set up is not missed.
+		if watcher == nil {
+			watcher, err = newDirWatcher(watchDir)
+			if err != nil {
+				// Retried every interval; only log the first failure.
+				if !watchFailing {
+					log.Printf("%s: unable to watch %s, relying on the %s poll: %v", method, watchDir, interval, err)
 				}
-			} else if event.Name == dpi.socketPath && event.Op == fsnotify.Remove {
-				// Watcher event for removal of socket file
-				log.Printf("%s: Socket path for GPU device was removed, kubelet likely restarted", method)
-				// Trigger restart of the DP servers
-				if err := dpi.restart(); err != nil {
-					log.Printf("%s: Unable to restart server %v", method, err)
-					return err
-				}
-				log.Printf("%s: Successfully restarted %s device plugin server. Terminating.", method, dpi.deviceName)
+				watcher = nil
+				watchFailing = true
+			} else if watchFailing {
+				log.Printf("%s: watching %s again", method, watchDir)
+				watchFailing = false
+			}
+		}
+
+		for id, devPath := range devicePaths {
+			healthy := deviceNodePresent(method, devPath)
+			if healthy == lastHealthy[id] {
+				continue
+			}
+
+			ch := dpi.unhealthy
+			if healthy {
+				log.Printf("%s: device node %s reappeared, marking device %s healthy", method, devPath, id)
+				ch = dpi.healthy
+			} else {
+				log.Printf("%s: device node %s disappeared, marking device %s unhealthy", method, devPath, id)
+			}
+
+			// Only record the transition once ListAndWatch has taken it.
+			// Kubelet may not have opened the stream yet; blocking here until
+			// it does is correct, and both channels below cancel it.
+			select {
+			case ch <- id:
+				lastHealthy[id] = healthy
+			case <-dpi.stop:
+				return nil
+			case <-done:
 				return nil
 			}
 		}
+
+		var events chan fsnotify.Event
+		var watchErrors chan error
+		if watcher != nil {
+			events, watchErrors = watcher.Events, watcher.Errors
+		}
+
+		select {
+		case <-ticker.C:
+		case event, ok := <-events:
+			// Any change in the directory triggers a full check; the event
+			// itself does not need to name one of our devices. If the
+			// directory itself went away, the watch is gone with it, so drop
+			// it and let the next pass set it up again.
+			if !ok || (event.Name == watchDir && event.Has(fsnotify.Remove|fsnotify.Rename)) {
+				log.Printf("%s: lost watch on %s, re-establishing", method, watchDir)
+				watcher.Close()
+				watcher = nil
+			}
+		case err, ok := <-watchErrors:
+			// Typically an event queue overflow. The check that follows
+			// recovers whatever was dropped.
+			if !ok {
+				watcher.Close()
+				watcher = nil
+			} else {
+				log.Printf("%s: error watching %s: %v", method, watchDir, err)
+			}
+		case <-dpi.stop:
+			log.Printf("%s: shutting down", method)
+			return nil
+		case <-done:
+			log.Printf("%s: device plugin server was torn down, stopping health checks", method)
+			return nil
+		}
 	}
+}
+
+// deviceNodePresent reports whether a device node exists. Errors other than
+// "does not exist" are treated as present: a transient or permission-related
+// stat failure must not mark every GPU on the node unhealthy.
+func deviceNodePresent(method, devPath string) bool {
+	_, err := os.Stat(devPath)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+
+	log.Printf("%s: unable to stat %s, assuming device is still present: %v", method, devPath, err)
+	return true
 }
 
 func supportsIOMMUFD() (bool, error) {

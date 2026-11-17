@@ -29,16 +29,18 @@
 package device_plugin
 
 import (
+	"path/filepath"
 	"time"
+
+	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
 const (
-	DeviceNamespace   = "nvidia.com"
-	connectionTimeout = 5 * time.Second
-	vfioDevicePath    = "/dev/vfio"
-	iommuDevicePath   = "/dev/iommu"
-	gpuPrefix         = "PCI_RESOURCE_NVIDIA_COM"
-	cdiVendor         = "nvidia.com"
+	DeviceNamespace = "nvidia.com"
+	vfioDevicePath  = "/dev/vfio"
+	iommuDevicePath = "/dev/iommu"
+	gpuPrefix       = "PCI_RESOURCE_NVIDIA_COM"
+	cdiVendor       = "nvidia.com"
 )
 
 var (
@@ -48,7 +50,35 @@ var (
 	cdiRoot = "/var/run/cdi"
 	// Flag to allow running GFD pod
 	EnableGFD = false
+
+	// healthCheckInterval is how often each plugin re-checks that the device
+	// nodes backing its devices still exist. Overridable in tests.
+	healthCheckInterval = 10 * time.Second
+
+	// socketCheckInterval is how often the plugin manager verifies that every
+	// plugin socket is still present in the kubelet device-plugin directory.
+	// This is the backstop for the fsnotify watch on that directory, and the
+	// retry timer for plugins whose last re-registration attempt failed.
+	// Overridable in tests.
+	socketCheckInterval = 30 * time.Second
+
+	// connectionTimeout bounds a single dial of either kubelet's registration
+	// socket or this plugin's own socket. Overridable in tests.
+	connectionTimeout = 5 * time.Second
+
+	// devicePluginPath is the directory kubelet scans for device plugin
+	// sockets, and kubeletSocket is kubelet's registration socket inside it.
+	// These are variables rather than the pluginapi constants so that tests can
+	// point them at a temporary directory.
+	devicePluginPath = pluginapi.DevicePluginPath
+	kubeletSocket    = pluginapi.KubeletSocket
 )
+
+// setDevicePluginPath redirects the kubelet device-plugin directory. For tests.
+func setDevicePluginPath(dir string) {
+	devicePluginPath = dir
+	kubeletSocket = filepath.Join(dir, filepath.Base(pluginapi.KubeletSocket))
+}
 
 func setCdiRoot(path string) {
 	cdiRoot = path
