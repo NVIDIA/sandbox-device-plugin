@@ -160,38 +160,46 @@ func generateCDISpecForClass(class string, scopedIommuKeys []string) error {
 
 	for _, iommuKey := range sortedKeys {
 		devices := iommuMap[iommuKey]
+		if len(devices) == 0 {
+			continue
+		}
+
+		// All PCI devices behind one IOMMU key (e.g. several GPUs in the same
+		// IOMMU group) form a single CDI device named after the key, so that
+		// device names stay unique within the spec.
+		var deviceNodes []*specs.DeviceNode
+		seenPaths := make(map[string]bool)
 		for _, dev := range devices {
 			// Build the device node paths based on IOMMU mode:
 			// - IOMMUFD (modern): single device at /dev/vfio/devices/<fd>
 			// - Legacy VFIO: requires both /dev/vfio/vfio (control) and /dev/vfio/<group>
-			var deviceNodes []*specs.DeviceNode
+			var paths []string
 			if iommufdSupported && dev.IommuFD != "" {
-				deviceNodes = append(deviceNodes, &specs.DeviceNode{
-					Path: filepath.Join(vfioDevicePath, "devices", dev.IommuFD),
-				})
+				paths = []string{filepath.Join(vfioDevicePath, "devices", dev.IommuFD)}
 			} else {
-				deviceNodes = append(deviceNodes,
-					&specs.DeviceNode{
-						Path: filepath.Join(vfioDevicePath, "vfio"),
-					},
-					&specs.DeviceNode{
-						Path: filepath.Join(vfioDevicePath, iommuKey),
-					},
-				)
+				paths = []string{
+					filepath.Join(vfioDevicePath, "vfio"),
+					filepath.Join(vfioDevicePath, iommuKey),
+				}
 			}
-
-			cedits := specs.ContainerEdits{
-				DeviceNodes: deviceNodes,
+			for _, p := range paths {
+				if seenPaths[p] {
+					continue
+				}
+				seenPaths[p] = true
+				deviceNodes = append(deviceNodes, &specs.DeviceNode{Path: p})
 			}
-
-			deviceSpecs = append(deviceSpecs, specs.Device{
-				Name:           iommuKey,
-				ContainerEdits: cedits,
-			})
 
 			log.Printf("Added CDI device %s: address=%s, class=%s",
 				iommuKey, dev.Address, class)
 		}
+
+		deviceSpecs = append(deviceSpecs, specs.Device{
+			Name: iommuKey,
+			ContainerEdits: specs.ContainerEdits{
+				DeviceNodes: deviceNodes,
+			},
+		})
 	}
 
 	if len(deviceSpecs) == 0 {
